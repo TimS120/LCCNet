@@ -34,8 +34,8 @@ from models.LCCNet import LCCNet
 from quaternion_distances import quaternion_distance
 
 from tensorboardX import SummaryWriter
-from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
-                   quaternion_from_matrix, rotate_back, rotate_forward,
+from utils import (merge_inputs, overlay_imgs, quat2mat,
+                   rotate_back, rotate_forward,
                    tvector2mat)
 
 torch.backends.cudnn.enabled = True

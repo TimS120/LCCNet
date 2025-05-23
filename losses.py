@@ -13,7 +13,7 @@ import torch
 from torch import nn as nn
 
 from quaternion_distances import quaternion_distance
-from utils import quat2mat, rotate_back, rotate_forward, tvector2mat, quaternion_from_matrix
+from utils import quat2mat, rotate_forward, tvector2mat
 
 
 class GeometricLoss(nn.Module):

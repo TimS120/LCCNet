@@ -12,9 +12,7 @@
 import csv
 import os
 from math import radians
-import cv2
 
-import h5py
 import mathutils
 import numpy as np
 import pandas as pd
@@ -24,7 +22,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from utils import invert_pose, rotate_forward, quaternion_from_matrix, read_calib_file
+from utils import invert_pose, rotate_forward
 from pykitti import odometry
 import pykitti
 

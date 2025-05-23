@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-import os
-
-import torch
-from setuptools import find_packages, setup
+from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-cxx_args = ['-std=c++11']
+cxx_args = ['-std=c++17']
 
 nvcc_args = [
     '-gencode', 'arch=compute_50,code=sm_50',
@@ -26,4 +23,5 @@ setup(
     ],
     cmdclass={
         'build_ext': BuildExtension
-    })
+    }
+)

@@ -14,9 +14,6 @@ import random
 import open3d as o3
 
 import cv2
-import mathutils
-# import matplotlib
-# matplotlib.use('Qt5Agg')
 import os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,7 +23,6 @@ import torch.nn.parallel
 import torch.utils.data
 from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
-from skimage import io
 from tqdm import tqdm
 import time
 
@@ -37,14 +33,6 @@ from quaternion_distances import quaternion_distance
 from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    quaternion_from_matrix, rotate_back, rotate_forward,
                    tvector2mat)
-
-from torch.utils.data import Dataset
-from pykitti import odometry
-import pandas as pd
-from PIL import Image
-from math import radians
-from utils import invert_pose
-from torchvision import transforms
 
 
 # import matplotlib

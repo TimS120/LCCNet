@@ -6,36 +6,16 @@ Modified version (LCCNet) by Xudong Lv
 """
 
 import torch
-import torchvision
-import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
 import numpy as np
 from torch.autograd import Variable
 import torchvision.models as models
-import torch.utils.model_zoo as model_zoo
-#from models.CMRNet.modules.attention import *
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-import math
-import argparse
 import os
-import os.path
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from PIL import Image
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
-# from .networks.submodules import *
-# from .networks.correlation_package.correlation import Correlation
 from models.correlation_package.correlation import Correlation
-
-
-
-# __all__ = [
-#     'calib_net'
-# ]
 
 
 class BasicBlock(nn.Module):
