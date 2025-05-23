@@ -48,8 +48,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         self.suf = suf
 
         self.all_files = []
-        self.sequence_list = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
-                              '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+        self.sequence_list = ['00']
         # self.model = CameraModel()
         # self.model.focal_length = [7.18856e+02, 7.18856e+02]
         # self.model.principal_point = [6.071928e+02, 1.852157e+02]
@@ -232,7 +231,11 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         # 随机设置一定范围内的标定参数扰动值
         # train的时候每次都随机生成,每个epoch使用不同的参数
         # test则在初始化的时候提前设置好,每个epoch都使用相同的参数
-        R = mathutils.Euler((rotx, roty, rotz), 'XYZ')
+
+        qx = mathutils.Quaternion((1.0, 0.0, 0.0), rotx)
+        qy = mathutils.Quaternion((0.0, 1.0, 0.0), roty)
+        qz = mathutils.Quaternion((0.0, 0.0, 1.0), rotz)
+        R = qz @ qy @ qx
         T = mathutils.Vector((transl_x, transl_y, transl_z))
 
         R, T = invert_pose(R, T)
@@ -470,7 +473,10 @@ class DatasetLidarCameraKittiRaw(Dataset):
         # 随机设置一定范围内的标定参数扰动值
         # train的时候每次都随机生成,每个epoch使用不同的参数
         # test则在初始化的时候提前设置好,每个epoch都使用相同的参数
-        R = mathutils.Euler((rotx, roty, rotz), 'XYZ')
+        qx = mathutils.Quaternion((1.0, 0.0, 0.0), rotx)
+        qy = mathutils.Quaternion((0.0, 1.0, 0.0), roty)
+        qz = mathutils.Quaternion((0.0, 0.0, 1.0), rotz)
+        R = qz @ qy @ qx
         T = mathutils.Vector((transl_x, transl_y, transl_z))
 
         R, T = invert_pose(R, T)

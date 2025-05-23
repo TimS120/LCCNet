@@ -43,7 +43,7 @@ font_EN = {'family': 'Times New Roman', 'weight': 'normal', 'size': 16}
 font_CN = {'family': 'AR PL UMing CN', 'weight': 'normal', 'size': 16}
 plt_size = 10.5
 
-ex = Experiment("LCCNet-evaluate-iterative")
+ex = Experiment("LCCNet-evaluate-iterative", save_git_info=False)
 ex.captured_out_filter = apply_backspaces_and_linefeeds
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
@@ -52,7 +52,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = '/home/wangshuo/Datasets/KITTI/odometry_color/'
+    data_folder = './odometry_color_short/'
     test_sequence = 0
     use_prev_output = False
     max_t = 1.5
@@ -121,8 +121,7 @@ def lidar_project_depth(pc_rotated, cam_calib, img_shape):
     pcl_z = pcl_z.reshape(-1, 1)
     depth_img = np.zeros((img_shape[0], img_shape[1], 1))
     depth_img[pcl_uv[:, 1], pcl_uv[:, 0]] = pcl_z
-    depth_img = torch.from_numpy(depth_img.astype(np.float32))
-    depth_img = depth_img.cuda()
+    depth_img = torch.from_numpy(depth_img.astype(np.float32)).to(device)
     depth_img = depth_img.permute(2, 0, 1)
     pc_valid = pc_rotated.T[mask]
 
@@ -150,11 +149,20 @@ def main(_config, seed):
     if _config['test_sequence'] is None:
         raise TypeError('test_sequences cannot be None')
     else:
+        # compute a formatted, two-digit test_sequence without mutating Sacred's config
         if isinstance(_config['test_sequence'], int):
-            _config['test_sequence'] = f"{_config['test_sequence']:02d}"
-        dataset_val = dataset_class(_config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
-                                    split='test', use_reflectance=_config['use_reflectance'],
-                                    val_sequence=_config['test_sequence'])
+            test_sequence = f"{_config['test_sequence']:02d}"
+        else:
+            test_sequence = _config['test_sequence']
+
+        dataset_val = dataset_class(
+            _config['data_folder'],
+            max_r=_config['max_r'],
+            max_t=_config['max_t'],
+            split='test',
+            use_reflectance=_config['use_reflectance'],
+            val_sequence=test_sequence
+        )
 
     np.random.seed(seed)
     torch.random.manual_seed(seed)
@@ -215,26 +223,26 @@ def main(_config, seed):
 
     show = _config['show']
     # save image to the output path
-    _config['output'] = os.path.join(_config['output'], _config['iterative_method'])
-    rgb_path = os.path.join(_config['output'], 'rgb')
+    output_dir = os.path.join(_config['output'], _config['iterative_method'])
+    rgb_path = os.path.join(output_dir, 'rgb')
     if not os.path.exists(rgb_path):
         os.makedirs(rgb_path)
-    depth_path = os.path.join(_config['output'], 'depth')
+    depth_path = os.path.join(output_dir, 'depth')
     if not os.path.exists(depth_path):
         os.makedirs(depth_path)
-    input_path = os.path.join(_config['output'], 'input')
+    input_path = os.path.join(output_dir, 'input')
     if not os.path.exists(input_path):
         os.makedirs(input_path)
-    gt_path = os.path.join(_config['output'], 'gt')
+    gt_path = os.path.join(output_dir, 'gt')
     if not os.path.exists(gt_path):
         os.makedirs(gt_path)
     if _config['out_fig_lg'] == 'EN':
-        results_path = os.path.join(_config['output'], 'results_en')
-    elif _config['out_fig_lg'] == 'CN':
-        results_path = os.path.join(_config['output'], 'results_cn')
+        results_path = os.path.join(output_dir, 'results_en')
+    else:
+        results_path = os.path.join(output_dir, 'results_cn')
     if not os.path.exists(results_path):
         os.makedirs(results_path)
-    pred_path = os.path.join(_config['output'], 'pred')
+    pred_path = os.path.join(output_dir, 'pred')
     for it in range(len(weights)):
         if not os.path.exists(os.path.join(pred_path, 'iteration_'+str(it+1))):
             os.makedirs(os.path.join(pred_path, 'iteration_'+str(it+1)))
@@ -288,8 +296,8 @@ def main(_config, seed):
 
         if batch_idx == 0 or not _config['use_prev_output']:
             # Qui dare posizione di input del frame corrente rispetto alla GT
-            sample['tr_error'] = sample['tr_error'].cuda()
-            sample['rot_error'] = sample['rot_error'].cuda()
+            sample['tr_error'] = sample['tr_error'].to(device)
+            sample['rot_error'] = sample['rot_error'].to(device)
         else:
             sample['tr_error'] = prev_tr_error
             sample['rot_error'] = prev_rot_error
@@ -298,7 +306,7 @@ def main(_config, seed):
             # ProjectPointCloud in RT-pose
             real_shape = [sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2], sample['rgb'][idx].shape[0]]
 
-            sample['point_cloud'][idx] = sample['point_cloud'][idx].cuda()  # 变换到相机坐标系下的激光雷达点云
+            sample['point_cloud'][idx] = sample['point_cloud'][idx].to(device)
             pc_lidar = sample['point_cloud'][idx].clone()
 
             if _config['max_depth'] < 80.:
@@ -349,7 +357,7 @@ def main(_config, seed):
                 o3.write_point_cloud(pc_input_path + '/{}.pcd'.format(batch_idx), pcl_input)
 
             # PAD ONLY ON RIGHT AND BOTTOM SIDE
-            rgb = sample['rgb'][idx].cuda()
+            rgb = sample['rgb'][idx].to(device)
             shape_pad = [0, 0, 0, 0]
 
             shape_pad[3] = (img_shape[0] - rgb.shape[1])  # // 2
@@ -443,9 +451,9 @@ def main(_config, seed):
                 run_time = time.time() - t1
 
                 if _config['rot_transl_separated'] and iteration == 0:
-                    T_predicted = torch.tensor([[0., 0., 0.]], device='cuda')
+                    T_predicted = torch.tensor([[0., 0., 0.]], device=device)
                 if _config['rot_transl_separated'] and iteration == 1:
-                    R_predicted = torch.tensor([[1., 0., 0., 0.]], device='cuda')
+                    R_predicted = torch.tensor([[1., 0., 0., 0.]], device=device)
 
                 # Project the points in the new pose predicted by the i-th network
                 R_predicted = quat2mat(R_predicted[0])
@@ -765,4 +773,3 @@ def main(_config, seed):
     avg_time = total_time / len(TestImgLoader)
     print("average runing time on {} iteration: {} s".format(len(weights), avg_time))
     print("End!")
-
