@@ -3,3 +3,4 @@ odometry_color_short/
 pretrained/
 *.so
 build/
+output/

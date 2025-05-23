@@ -35,11 +35,8 @@ from utils import (mat2xyzrpy, merge_inputs, overlay_imgs, quat2mat,
                    tvector2mat)
 
 
-# import matplotlib
-# matplotlib.rc("font",family='AR PL UMing CN')
 plt.rcParams['axes.unicode_minus'] = False
-# plt.rc('font',family='Times New Roman')
-font_EN = {'family': 'Times New Roman', 'weight': 'normal', 'size': 16}
+font_EN = {'family': 'sans-serif', 'weight': 'normal', 'size': 16}
 font_CN = {'family': 'AR PL UMing CN', 'weight': 'normal', 'size': 16}
 plt_size = 10.5
 
@@ -72,7 +69,7 @@ def config():
     dropout = 0.0
     max_depth = 80.
     iterative_method = 'multi_range' # ['multi_range', 'single_range', 'single']
-    output = '../output'
+    output = './output'
     save_image = False
     outlier_filter = True
     outlier_filter_th = 10
@@ -668,8 +665,8 @@ def main(_config, seed):
         plt.ylabel('绝对误差/米', font_CN)
         plt.legend(loc='best', prop=font_CN)
 
-    plt.xticks(fontproperties='Times New Roman', size=plt_size)
-    plt.yticks(fontproperties='Times New Roman', size=plt_size)
+    plt.xticks(size=plt_size)
+    plt.yticks(size=plt_size)
 
     plt.savefig(os.path.join(results_path, 'xyz_plot.png'))
     plt.close('all')
@@ -689,8 +686,8 @@ def main(_config, seed):
     elif _config['out_fig_lg'] == 'CN':
         plt.xlabel('绝对平移误差/米', font_CN)
         plt.ylabel('实验序列数目/个', font_CN)
-    plt.xticks(fontproperties='Times New Roman', size=plt_size)
-    plt.yticks(fontproperties='Times New Roman', size=plt_size)
+    plt.xticks(size=plt_size)
+    plt.yticks(size=plt_size)
 
     plt.savefig(os.path.join(results_path, 'translation_error_distribution.png'))
     plt.close('all')
@@ -737,8 +734,8 @@ def main(_config, seed):
         plt.ylabel('绝对误差/度', font_CN)
         plt.legend(loc='best', prop=font_CN)
 
-    plt.xticks(fontproperties='Times New Roman', size=plt_size)
-    plt.yticks(fontproperties='Times New Roman', size=plt_size)
+    plt.xticks(size=plt_size)
+    plt.yticks(size=plt_size)
     plt.savefig(os.path.join(results_path, 'rpy_plot.png'))
     plt.close('all')
 
@@ -758,8 +755,8 @@ def main(_config, seed):
     elif _config['out_fig_lg'] == 'CN':
         plt.xlabel('绝对旋转误差/度', font_CN)
         plt.ylabel('实验序列数目/个', font_CN)
-    plt.xticks(fontproperties='Times New Roman', size=plt_size)
-    plt.yticks(fontproperties='Times New Roman', size=plt_size)
+    plt.xticks(size=plt_size)
+    plt.yticks(size=plt_size)
     plt.savefig(os.path.join(results_path, 'rotation_error_distribution.png'))
     plt.close('all')
 
