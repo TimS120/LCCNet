@@ -1,3 +1,5 @@
 __pycache__/
 odometry_color_short/
 pretrained/
+*.so
+build/

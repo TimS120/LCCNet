@@ -5,12 +5,11 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 cxx_args = ['-std=c++17']
 
 nvcc_args = [
-    '-gencode', 'arch=compute_50,code=sm_50',
-    '-gencode', 'arch=compute_52,code=sm_52',
-    '-gencode', 'arch=compute_60,code=sm_60',
-    '-gencode', 'arch=compute_61,code=sm_61',
-    '-gencode', 'arch=compute_70,code=sm_70',
-    '-gencode', 'arch=compute_70,code=compute_70'
+    '-gencode', 'arch=compute_75,code=sm_75',    # Turing (e.g., RTX 2080)
+    '-gencode', 'arch=compute_80,code=sm_80',    # Ampere (e.g., A100, RTX 30xx)
+    '-gencode', 'arch=compute_86,code=sm_86',    # Ampere (e.g., RTX 3090, Jetson Orin)
+    '-gencode', 'arch=compute_89,code=sm_89',    # Ada (e.g., RTX 40xx, optional)
+    '-gencode', 'arch=compute_90,code=sm_90'     # Hopper (e.g., H100, optional)
 ]
 
 setup(
