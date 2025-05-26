@@ -46,13 +46,9 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         self.GTs_T_cam02_velo = {}
         self.K = {}
         self.suf = suf
-
         self.all_files = []
-        self.sequence_list = ['00']
-        # self.model = CameraModel()
-        # self.model.focal_length = [7.18856e+02, 7.18856e+02]
-        # self.model.principal_point = [6.071928e+02, 1.852157e+02]
-        # for seq in ['00', '03', '05', '06', '07', '08', '09']:
+        self.sequence_list = ['00', '01', '02', '03', '04', '05']
+
         for seq in self.sequence_list:
             odom = odometry(self.root_dir, seq)
             calib = odom.calib
@@ -206,7 +202,10 @@ class DatasetLidarCameraKittiOdometry(Dataset):
 
         # Rotate PointCloud for img_rotation
         if self.split == 'train':
-            R = mathutils.Euler((radians(img_rotation), 0, 0), 'XYZ')
+            qx = mathutils.Quaternion((1.0, 0.0, 0.0), radians(img_rotation))
+            qy = mathutils.Quaternion((0.0, 1.0, 0.0), 0)
+            qz = mathutils.Quaternion((0.0, 0.0, 1.0), 0)
+            R = qz @ qy @ qx
             T = mathutils.Vector((0., 0., 0.))
             pc_in = rotate_forward(pc_in, R, T)
 

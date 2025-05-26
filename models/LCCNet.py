@@ -12,6 +12,14 @@ import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+from torchvision.models import (
+    ResNet18_Weights,
+    ResNet34_Weights,
+    ResNet50_Weights,
+    ResNet101_Weights,
+    ResNet152_Weights,
+)
+
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
@@ -187,7 +195,18 @@ class ResnetEncoder(nn.Module):
         if num_layers not in resnets:
             raise ValueError("{} is not a valid number of resnet layers".format(num_layers))
 
-        self.encoder = resnets[num_layers](pretrained)
+        if pretrained:
+            weights_map = {
+                18:  ResNet18_Weights.IMAGENET1K_V1,
+                34:  ResNet34_Weights.IMAGENET1K_V1,
+                50:  ResNet50_Weights.IMAGENET1K_V1,
+                101: ResNet101_Weights.IMAGENET1K_V1,
+                152: ResNet152_Weights.IMAGENET1K_V1,
+            }
+            chosen_weights = weights_map[num_layers]
+        else:
+            chosen_weights = None
+        self.encoder = resnets[num_layers](weights=chosen_weights)
 
         if num_layers > 34:
             self.num_ch_enc[1:] *= 4

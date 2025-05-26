@@ -41,7 +41,7 @@ from utils import (merge_inputs, overlay_imgs, quat2mat,
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = False
 
-ex = Experiment("LCCNet")
+ex = Experiment("LCCNet", save_git_info=False)
 ex.captured_out_filter = apply_backspaces_and_linefeeds
 
 
@@ -50,7 +50,7 @@ ex.captured_out_filter = apply_backspaces_and_linefeeds
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    data_folder = '/home/wangshuo/Datasets/KITTI/odometry/data_odometry_full/'
+    data_folder = './odometry_color_short/'
     use_reflectance = False
     val_sequence = 0
     epochs = 120
@@ -58,12 +58,12 @@ def config():
     loss = 'combined'
     max_t = 0.1 # 1.5, 1.0,  0.5,  0.2,  0.1
     max_r = 1. # 20.0, 10.0, 5.0,  2.0,  1.0
-    batch_size = 240  # 120
+    batch_size = 32
     num_worker = 6
     network = 'Res_f1'
     optimizer = 'adam'
     resume = True
-    weights = './pretrained/kitti/kitti_iter5.tar'
+    weights = './pretrained/kitti_iter5.tar'
     rescale_rot = 1.0
     rescale_transl = 2.0
     precision = "O0"
@@ -73,10 +73,10 @@ def config():
     weight_point_cloud = 0.5
     log_frequency = 10
     print_frequency = 50
-    starting_epoch = -1
+    starting_epoch = 0
 
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 
 
@@ -112,7 +112,7 @@ def lidar_project_depth(pc_rotated, cam_calib, img_shape):
     depth_img = np.zeros((img_shape[0], img_shape[1], 1))
     depth_img[pcl_uv[:, 1], pcl_uv[:, 0]] = pcl_z
     depth_img = torch.from_numpy(depth_img.astype(np.float32))
-    depth_img = depth_img.cuda()
+    depth_img = depth_img.to(device)
     depth_img = depth_img.permute(2, 0, 1)
 
     return depth_img, pcl_uv
@@ -158,7 +158,7 @@ def val(model, rgb_img, refl_img, target_transl, target_rot, loss_fn, point_clou
     # else:
     #     total_loss = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err)
 
-    total_trasl_error = torch.tensor(0.0)
+    total_trasl_error = torch.tensor(0.0, device=target_transl.device)
     total_rot_error = quaternion_distance(target_rot, rot_err, target_rot.device)
     total_rot_error = total_rot_error * 180. / math.pi
     for j in range(rgb_img.shape[0]):
@@ -183,23 +183,32 @@ def main(_config, _run, seed):
     if _config['val_sequence'] is None:
         raise TypeError('val_sequences cannot be None')
     else:
-        _config['val_sequence'] = f"{_config['val_sequence']:02d}"
-        print("Val Sequence: ", _config['val_sequence'])
+        if isinstance(_config['val_sequence'], int):
+            val_sequence = f"{_config['val_sequence']:02d}"
+        else:
+            val_sequence = _config['val_sequence']
+        print("Val Sequence: ", val_sequence)
         dataset_class = DatasetLidarCameraKittiOdometry
-    img_shape = (384, 1280) # 网络的输入尺度
-    input_size = (256, 512)
-    _config["checkpoints"] = os.path.join(_config["checkpoints"], _config['dataset'])
 
-    dataset_train = dataset_class(_config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
-                                  split='train', use_reflectance=_config['use_reflectance'],
-                                  val_sequence=_config['val_sequence'])
-    dataset_val = dataset_class(_config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
-                                split='val', use_reflectance=_config['use_reflectance'],
-                                val_sequence=_config['val_sequence'])
-    model_savepath = os.path.join(_config['checkpoints'], 'val_seq_' + _config['val_sequence'], 'models')
+    img_shape = (384, 1280)
+    input_size = (256, 512)
+    checkpoint_root = os.path.join(_config["checkpoints"], _config['dataset'])
+
+    dataset_train = dataset_class(
+        _config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
+        split='train', use_reflectance=_config['use_reflectance'],
+        val_sequence=val_sequence
+    )
+    dataset_val = dataset_class(
+       _config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
+        split='val', use_reflectance=_config['use_reflectance'],
+        val_sequence=val_sequence
+    )
+
+    model_savepath = os.path.join(checkpoint_root, f'val_seq_{val_sequence}', 'models')
     if not os.path.exists(model_savepath):
         os.makedirs(model_savepath)
-    log_savepath = os.path.join(_config['checkpoints'], 'val_seq_' + _config['val_sequence'], 'log')
+    log_savepath = os.path.join(checkpoint_root, f'val_seq_{val_sequence}', 'log')
     if not os.path.exists(log_savepath):
         os.makedirs(log_savepath)
     train_writer = SummaryWriter(os.path.join(log_savepath, 'train'))
@@ -243,8 +252,7 @@ def main(_config, _run, seed):
     if _config['loss'] == 'simple':
         loss_fn = ProposedLoss(_config['rescale_transl'], _config['rescale_rot'])
     elif _config['loss'] == 'geometric':
-        loss_fn = GeometricLoss()
-        loss_fn = loss_fn.cuda()
+        loss_fn = GeometricLoss().to(device)
     elif _config['loss'] == 'points_distance':
         loss_fn = DistancePoints3D()
     elif _config['loss'] == 'L1':
@@ -278,7 +286,7 @@ def main(_config, _run, seed):
         raise TypeError("Network unknown")
     if _config['weights'] is not None:
         print(f"Loading weights from {_config['weights']}")
-        checkpoint = torch.load(_config['weights'], map_location='cpu')
+        checkpoint = torch.load(_config['weights'], map_location=device)
         saved_state_dict = checkpoint['state_dict']
         model.load_state_dict(saved_state_dict)
 
@@ -293,9 +301,9 @@ def main(_config, _run, seed):
         # # load params
         # model.load_state_dict(new_state_dict)
 
-    # model = model.to(device)
-    model = nn.DataParallel(model)
-    model = model.cuda()
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+    model = model.to(device)
 
     print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
@@ -341,7 +349,7 @@ def main(_config, _run, seed):
                                     math.exp((1 - epoch) * 4e-2)
         else:
             #scheduler.step(epoch%100)
-            _run.log_scalar("LR", scheduler.get_lr()[0])
+            _run.log_scalar("LR", scheduler.get_last_lr()[0])
 
 
         ## Training ##
@@ -357,15 +365,15 @@ def main(_config, _run, seed):
             pc_rotated_input = []
 
             # gt pose
-            sample['tr_error'] = sample['tr_error'].cuda()
-            sample['rot_error'] = sample['rot_error'].cuda()
+            sample['tr_error'] = sample['tr_error'].to(device)
+            sample['rot_error'] = sample['rot_error'].to(device)
 
             start_preprocess = time.time()
             for idx in range(len(sample['rgb'])):
                 # ProjectPointCloud in RT-pose
                 real_shape = [sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2], sample['rgb'][idx].shape[0]]
 
-                sample['point_cloud'][idx] = sample['point_cloud'][idx].cuda() # 变换到相机坐标系下的激光雷达点云
+                sample['point_cloud'][idx] = sample['point_cloud'][idx].to(device)
                 pc_lidar = sample['point_cloud'][idx].clone()
 
                 if _config['max_depth'] < 80.:
@@ -388,7 +396,7 @@ def main(_config, _run, seed):
                 depth_img /= _config['max_depth']
 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
-                rgb = sample['rgb'][idx].cuda()
+                rgb = sample['rgb'][idx].to(device)
                 shape_pad = [0, 0, 0, 0]
 
                 shape_pad[3] = (img_shape[0] - rgb.shape[1])  # // 2
@@ -495,14 +503,14 @@ def main(_config, _run, seed):
             pc_rotated_input = []
 
             # gt pose
-            sample['tr_error'] = sample['tr_error'].cuda()
-            sample['rot_error'] = sample['rot_error'].cuda()
+            sample['tr_error'] = sample['tr_error'].to(device)
+            sample['rot_error'] = sample['rot_error'].to(device)
 
             for idx in range(len(sample['rgb'])):
                 # ProjectPointCloud in RT-pose
                 real_shape = [sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2], sample['rgb'][idx].shape[0]]
 
-                sample['point_cloud'][idx] = sample['point_cloud'][idx].cuda() # 变换到相机坐标系下的激光雷达点云
+                sample['point_cloud'][idx] = sample['point_cloud'][idx].to(device)
                 pc_lidar = sample['point_cloud'][idx].clone()
 
                 if _config['max_depth'] < 80.:
@@ -513,7 +521,7 @@ def main(_config, _run, seed):
 
                 reflectance = None
                 if _config['use_reflectance']:
-                    reflectance = sample['reflectance'][idx].cuda()
+                    reflectance = sample['reflectance'][idx].to(device)
 
                 R = mathutils.Quaternion(sample['rot_error'][idx]).to_matrix()
                 R.resize_4x4()
@@ -547,7 +555,7 @@ def main(_config, _run, seed):
                 #     depth_img = torch.stack((depth_img, refl_img))
 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
-                rgb = sample['rgb'][idx].cuda()
+                rgb = sample['rgb'][idx].to(device)
                 shape_pad = [0, 0, 0, 0]
 
                 shape_pad[3] = (img_shape[0] - rgb.shape[1])  # // 2
@@ -648,11 +656,16 @@ def main(_config, _run, seed):
             else:
                 _run.result = total_val_r / len(dataset_val)
             savefilename = f'{model_savepath}/checkpoint_r{_config["max_r"]:.2f}_t{_config["max_t"]:.2f}_e{epoch}_{val_loss:.3f}.tar'
+
+            if hasattr(model, "module"):
+                sd = model.module.state_dict()  # multi gpu
+            else:
+                sd = model.state_dict()  # single gpu
+
             torch.save({
                 'config': _config,
                 'epoch': epoch,
-                # 'state_dict': model.state_dict(), # single gpu
-                'state_dict': model.module.state_dict(), # multi gpu
+                'state_dict': sd, 
                 'optimizer': optimizer.state_dict(),
                 'train_loss': total_train_loss / len(dataset_train),
                 'val_loss': total_val_loss / len(dataset_val),
