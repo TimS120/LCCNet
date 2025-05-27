@@ -50,20 +50,22 @@ ex.captured_out_filter = apply_backspaces_and_linefeeds
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    data_folder = './odometry_color_short/'
+    data_folder = './datasets/own_odometry_dataset/'  # './odometry_color_short/'
+    img_shape  = (2128, 2600)  # padded image resolution (H, W)
+    input_size  = (256, 512)   # network input resolution (H, W)
     use_reflectance = False
     val_sequence = 0
-    epochs = 120
+    epochs = 120  # 120 for the first model (iter5), every other only 50, since we can use iter5 as a pretrained model for the other
     BASE_LEARNING_RATE = 3e-4  # 1e-4
     loss = 'combined'
-    max_t = 0.1 # 1.5, 1.0,  0.5,  0.2,  0.1
-    max_r = 1. # 20.0, 10.0, 5.0,  2.0,  1.0
+    max_t = 1.5  # iter5, iter4, 3, 2, 1: 1.5, 1.0, 0.5, 0.2, 0.1
+    max_r = 20.0  # iter5, iter4, 3, 2, 1: 20.0, 10.0, 5.0, 2.0, 1.0
     batch_size = 32
     num_worker = 6
     network = 'Res_f1'
     optimizer = 'adam'
-    resume = True
-    weights = './pretrained/kitti_iter5.tar'
+    resume = False
+    weights = None  # './pretrained/kitti_iter5.tar'  # set a weights file to use a pretrained one or None for a start from scratch
     rescale_rot = 1.0
     rescale_transl = 2.0
     precision = "O0"
@@ -190,19 +192,22 @@ def main(_config, _run, seed):
         print("Val Sequence: ", val_sequence)
         dataset_class = DatasetLidarCameraKittiOdometry
 
-    img_shape = (384, 1280)
-    input_size = (256, 512)
+    img_shape   = tuple(_config['img_shape'])
+    input_size  = tuple(_config['input_size'])
+
     checkpoint_root = os.path.join(_config["checkpoints"], _config['dataset'])
 
     dataset_train = dataset_class(
         _config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
         split='train', use_reflectance=_config['use_reflectance'],
-        val_sequence=val_sequence
+        val_sequence=val_sequence,
+        device=device
     )
     dataset_val = dataset_class(
        _config['data_folder'], max_r=_config['max_r'], max_t=_config['max_t'],
         split='val', use_reflectance=_config['use_reflectance'],
-        val_sequence=val_sequence
+        val_sequence=val_sequence,
+        device=device
     )
 
     model_savepath = os.path.join(checkpoint_root, f'val_seq_{val_sequence}', 'models')
@@ -417,8 +422,8 @@ def main(_config, _run, seed):
             rgb_input = torch.stack(rgb_input)
             rgb_show = rgb_input.clone()
             lidar_show = lidar_input.clone()
-            rgb_input = F.interpolate(rgb_input, size=[256, 512], mode="bilinear")
-            lidar_input = F.interpolate(lidar_input, size=[256, 512], mode="bilinear")
+            rgb_input = F.interpolate(rgb_input, size=list(input_size), mode="bilinear")
+            lidar_input = F.interpolate(lidar_input, size=list(input_size), mode="bilinear")
             end_preprocess = time.time()
             loss, R_predicted,  T_predicted = train(model, optimizer, rgb_input, lidar_input,
                                                    sample['tr_error'], sample['rot_error'],
@@ -655,21 +660,19 @@ def main(_config, _run, seed):
                 _run.result = total_val_t / len(dataset_val)
             else:
                 _run.result = total_val_r / len(dataset_val)
-            savefilename = f'{model_savepath}/checkpoint_r{_config["max_r"]:.2f}_t{_config["max_t"]:.2f}_e{epoch}_{val_loss:.3f}.tar'
+            savefilename = f'{model_savepath}/checkpoint_r{_config["max_r"]:.2f}_t{_config["max_t"]:.2f}_e{epoch}_{val_loss:.3f}.pth'
 
             if hasattr(model, "module"):
                 sd = model.module.state_dict()  # multi gpu
             else:
                 sd = model.state_dict()  # single gpu
 
-            torch.save({
-                'config': _config,
-                'epoch': epoch,
-                'state_dict': sd, 
-                'optimizer': optimizer.state_dict(),
-                'train_loss': total_train_loss / len(dataset_train),
-                'val_loss': total_val_loss / len(dataset_val),
-            }, savefilename)
+            # only save raw weights for evaluation
+            torch.save(
+                sd,
+                savefilename
+            )
+
             print(f'Model saved as {savefilename}')
             if old_save_filename is not None:
                 if os.path.exists(old_save_filename):

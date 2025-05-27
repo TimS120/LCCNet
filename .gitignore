@@ -1,5 +1,5 @@
 __pycache__/
-odometry_color_short/
+datasets/
 pretrained/
 *.so
 build/

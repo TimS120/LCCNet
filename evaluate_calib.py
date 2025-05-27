@@ -49,7 +49,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './odometry_color_short/'
+    data_folder = './datasets/own_odometry_dataset/'
+    img_shape  = (2128, 2600)  # padded image resolution (H, W)
+    input_size  = (256, 512)   # network input resolution (H, W)
     test_sequence = 0
     use_prev_output = False
     max_t = 1.5
@@ -62,8 +64,7 @@ def config():
     use_reflectance = False
     weight = None  # List of weights' path, for iterative refinement
     save_name = None
-    # Set to True only if you use two network, the first for rotation and the second for translation
-    rot_transl_separated = False
+    rot_transl_separated = False  # Set to True only if you use two networks, the first for rotation and the second for translation
     random_initial_pose = False
     save_log = False
     dropout = 0.0
@@ -71,19 +72,16 @@ def config():
     iterative_method = 'multi_range' # ['multi_range', 'single_range', 'single']
     output = './output'
     save_image = False
-    outlier_filter = True
+    outlier_filter = False
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
 weights = [
-   './pretrained/kitti_iter1.tar',
-   './pretrained/kitti_iter2.tar',
-   './pretrained/kitti_iter3.tar',
-   './pretrained/kitti_iter4.tar',
-   './pretrained/kitti_iter5.tar',
+    'checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e1_0.048.pth'
 ]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 
 EPOCH = 1
 
@@ -136,8 +134,9 @@ def main(_config, seed):
 
     dataset_class = DatasetLidarCameraKittiOdometry
     # dataset_class = DatasetTest
-    img_shape = (384, 1280)
-    input_size = (256, 512)
+
+    img_shape   = tuple(_config['img_shape'])
+    input_size  = tuple(_config['input_size'])
 
     # split = 'test'
     if _config['random_initial_pose']:
@@ -158,7 +157,8 @@ def main(_config, seed):
             max_t=_config['max_t'],
             split='test',
             use_reflectance=_config['use_reflectance'],
-            val_sequence=test_sequence
+            val_sequence=test_sequence,
+            device=device
         )
 
     np.random.seed(seed)
@@ -200,8 +200,7 @@ def main(_config, seed):
         else:
             raise TypeError("Network unknown")
 
-        checkpoint = torch.load(weights[i], map_location='cpu')
-        saved_state_dict = checkpoint['state_dict']
+        saved_state_dict   = torch.load(weights[i], map_location=device)
         model.load_state_dict(saved_state_dict)
         model = model.to(device)
         model.eval()
@@ -528,6 +527,11 @@ def main(_config, seed):
     # Pitch（俯仰）：欧拉角向量的x轴
     # Roll（翻滚）： 欧拉角向量的z轴
     # mis_calib_input[transl_x, transl_y, transl_z, rotx, roty, rotz] Nx6
+    if not mis_calib_list:
+        raise RuntimeError("mis_calib_list is empty. "
+                           "Either disable outlier_filter or verify that your dataset produces valid "
+                           "projected point clouds (uv_input)."
+    )
     mis_calib_input = torch.stack(mis_calib_list)[:, :, 0]
 
     if _config['save_log']:
@@ -768,5 +772,5 @@ def main(_config, seed):
         torch.save(torch.stack(errors_rpy).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_rpy')
 
     avg_time = total_time / len(TestImgLoader)
-    print("average runing time on {} iteration: {} s".format(len(weights), avg_time))
+    print("Average running time on {} iteration: {} s".format(len(weights), avg_time))
     print("End!")
