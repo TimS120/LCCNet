@@ -1,7 +1,9 @@
 # LCCNet
 
-Official PyTorch implementation of the paper “LCCNet: Lidar and Camera Self-Calibration Using Cost Volume Network”. A video of the demonstration of the method can be found on
+**Fork of** the official PyTorch implementation of the paper “LCCNet: Lidar and Camera Self-Calibration Using Cost Volume Network”. A video of the demonstration of the method can be found on
  https://www.youtube.com/watch?v=UAAGjYT708A
+
+
 
 ## Table of Contents
 
@@ -9,23 +11,61 @@ Official PyTorch implementation of the paper “LCCNet: Lidar and Camera Self-Ca
 - [Pre-trained model](#Pre-trained_model)
 - [Evaluation](#Evaluation)
 - [Train](#Train)
-- [Citation](#Citation)
+- [Acknowledgments](#Acknowledgments)
+<!-- - [Citation](#Citation)  currently no content! !-->
 
 
 
 ## Requirements
 
-* python 3.6 (recommend to use [Anaconda](https://www.anaconda.com/))
-* PyTorch==1.0.1.post2
-* Torchvision==0.2.2
-* Install requirements and dependencies
+### Hardware:
+  - CPU only
+    - If no gpu is available, then the scripts must be executed with cpu. Here is a big enough ram for a meaningful batch size favorable
+    - The cuda installation steps can then be skipped
+  - GPU:
+    - If a gpu is available you can run the scripts with the gpu - this is probably faster compared to the cpu usage
+
+### Installation: Docker
+
+  - Docker settings which were used:
+  ```commandline
+  docker build -t lccnet:latest .
+
+  docker run --rm -it --gpus all --shm-size=32g --ipc=host \
+      -v ~/Desktop/LCCNet:/workspace:rw \
+      lccnet:latest
+  
+  ```
+
+### Installation: Local
+
+- **Python**: 3.10
+- **CUDA & GPU**: CUDA 12.8 toolkit with a compatible NVIDIA driver (≥ 520.xx) if you plan to run on GPU
+- **PyTorch**: 2.7.0 with CUDA 12.8
+  ```commandline
+  pip install torch==2.7.0+cu128 torchvision==0.22.0+cu128 \
+    --index-url https://download.pytorch.org/whl/cu128
+
+### Installation: Note
+
+- In both cases you have to build the correlation_cuda-library e.g. by using
 ```commandline
-pip install -r requirements.txt
+cd models/correlation_package/
+
+python3 setup.py build_ext --inplace
 ```
 
-## Pre-trained model
+- Further requirements besides the _main requirements_ are written down in the requirements.txt file
 
-Pre-trained models can be downloaded from [google drive](https://drive.google.com/drive/folders/1VbQV3ERDeT3QbdJviNCN71yoWIItZQnl?usp=sharing)
+
+
+## Pre-trained models
+
+Pre-trained models can be downloaded from [google drive](https://drive.google.com/drive/folders/1VbQV3ERDeT3QbdJviNCN71yoWIItZQnl?usp=sharing) provided by the initial authors of the LCCNet
+
+- Note: The scripts are changed; they do now expect the models in .pth format instead of the .tar format (tar includes pth alongside other not needed information). A conversion script is also provided here (`convert_tar_to_pth.py`).
+
+
 
 ## Evaluation
 
@@ -38,11 +78,11 @@ data_folder = '/path/to/the/KITTI/odometry_color/'
 4. Download pre-trained models and modify the weights path in `evaluate_calib.py`.
 ```python
 weights = [
-   './pretrained/kitti_iter1.tar',
-   './pretrained/kitti_iter2.tar',
-   './pretrained/kitti_iter3.tar',
-   './pretrained/kitti_iter4.tar',
-   './pretrained/kitti_iter5.tar',
+   './pretrained/kitti_iter1.pth',
+   './pretrained/kitti_iter2.pth',
+   './pretrained/kitti_iter3.pth',
+   './pretrained/kitti_iter4.pth',
+   './pretrained/kitti_iter5.pth',
 ]
 ```
 5. Run evaluation.
@@ -50,28 +90,29 @@ weights = [
 python evaluate_calib.py
 ```
 
+
+
 ## Train
 ```commandline
 python train_with_sacred.py
 ```
+- As in the [initial paper](https://arxiv.org/pdf/2012.13901) discussed, it makes sense to train the first model with the biggest rotation and translation ranges with e.g. 120 epochs
+- All other models can be transfer-learning trained by using the first trained model as a pretrained model; the epochs can be lowered to e.g. 50 epochs
 
+
+
+<!--
 ## Citation
  
 Thank you for citing our paper if you use any of this code or datasets.
 ```
-@article{lv2020lidar,
-  title={Lidar and Camera Self-Calibration using CostVolume Network},
-  author={Lv, Xudong and Wang, Boya and Ye, Dong and Wang, Shuo},
-  journal={arXiv preprint arXiv:2012.13901},
-  year={2020}
-}
+_Insert here the citation_
 ```
+!-->
 
-### Acknowledgments
- We are grateful to Daniele Cattaneo for his CMRNet [github repository](https://github.com/cattaneod/CMRNet). We use it as our initial code base.
- 
-<!-- [correlation_package](models/LCCNet/correlation_package) was taken from [flownet2](https://github.com/NVIDIA/flownet2-pytorch/tree/master/networks/correlation_package)
 
-[LCCNet.py](model/LCCNet.py) is a modified version of the original [PWC-DC network](https://github.com/NVlabs/PWC-Net/blob/master/PyTorch/models/PWCNet.py) and modified version [CMRNet](https://github.com/cattaneod/CMRNet/blob/master/models/CMRNet/CMRNet.py)  -->
 
----
+## Acknowledgments
+Original github: [https://github.com/IIPCVLAB/LCCNet](https://github.com/IIPCVLAB/LCCNet)
+
+Original paper: [LCCNet: LiDAR and Camera Self-Calibration using Cost Volume Network](https://arxiv.org/pdf/2012.13901)

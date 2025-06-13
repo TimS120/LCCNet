@@ -50,7 +50,7 @@ ex.captured_out_filter = apply_backspaces_and_linefeeds
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    data_folder = './datasets/own_odometry_dataset/'  # './odometry_color_short/'
+    data_folder = './datasets/own_data_situation_split'  # './odometry_color_short/'
     img_shape  = (2128, 2600)  # padded image resolution (H, W)
     input_size  = (256, 512)   # network input resolution (H, W)
     use_reflectance = False
@@ -160,11 +160,11 @@ def val(model, rgb_img, refl_img, target_transl, target_rot, loss_fn, point_clou
     # else:
     #     total_loss = loss_fn(point_clouds, target_transl, target_rot, transl_err, rot_err)
 
-    total_trasl_error = torch.tensor(0.0, device=target_transl.device)
+    total_transl_error = torch.tensor(0.0, device=target_transl.device)
     total_rot_error = quaternion_distance(target_rot, rot_err, target_rot.device)
     total_rot_error = total_rot_error * 180. / math.pi
     for j in range(rgb_img.shape[0]):
-        total_trasl_error += torch.norm(target_transl[j] - transl_err[j]) * 100.
+        total_transl_error += torch.norm(target_transl[j] - transl_err[j]) * 100.
 
     # # output image: The overlay image of the input rgb image and the projected lidar pointcloud depth image
     # cam_intrinsic = camera_model[0]
@@ -174,7 +174,7 @@ def val(model, rgb_img, refl_img, target_transl, target_rot, loss_fn, point_clou
     # RT_predicted = torch.mm(T_predicted, R_predicted)
     # rotated_point_cloud = rotate_forward(rotated_point_cloud, RT_predicted)
 
-    return losses, total_trasl_error.item(), total_rot_error.sum().item(), rot_err, transl_err
+    return losses, total_transl_error.item(), total_rot_error.sum().item(), rot_err, transl_err
 
 
 @ex.automain
@@ -584,7 +584,7 @@ def main(_config, _run, seed):
             rgb_input = F.interpolate(rgb_input, size=[256, 512], mode="bilinear")
             lidar_input = F.interpolate(lidar_input, size=[256, 512], mode="bilinear")
 
-            loss, trasl_e, rot_e, R_predicted,  T_predicted = val(model, rgb_input, lidar_input,
+            loss, transl_e, rot_e, R_predicted,  T_predicted = val(model, rgb_input, lidar_input,
                                                                   sample['tr_error'], sample['rot_error'],
                                                                   loss_fn, sample['point_cloud'], _config['loss'])
 
@@ -630,7 +630,7 @@ def main(_config, _run, seed):
                     val_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), val_iter)
 
 
-            total_val_t += trasl_e
+            total_val_t += transl_e
             total_val_r += rot_e
             local_loss += loss['total_loss'].item()
 
@@ -643,7 +643,7 @@ def main(_config, _run, seed):
 
         print("------------------------------------")
         print('total val loss = %.3f' % (total_val_loss / len(dataset_val)))
-        print(f'total traslation error: {total_val_t / len(dataset_val)} cm')
+        print(f'total translation error: {total_val_t / len(dataset_val)} cm')
         print(f'total rotation error: {total_val_r / len(dataset_val)} °')
         print("------------------------------------")
 

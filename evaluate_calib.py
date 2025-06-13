@@ -49,13 +49,13 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/own_odometry_dataset/'
-    img_shape  = (2128, 2600)  # padded image resolution (H, W)
-    input_size  = (256, 512)   # network input resolution (H, W)
+    data_folder = './datasets/own_odometry_dataset_4/'
+    img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
     max_t = 1.5
-    max_r = 20.
+    max_r = 20.0
     occlusion_kernel = 5
     occlusion_threshold = 3.0
     network = 'Res_f1'
@@ -63,7 +63,7 @@ def config():
     show = False
     use_reflectance = False
     weight = None  # List of weights' path, for iterative refinement
-    save_name = None
+    save_name = True
     rot_transl_separated = False  # Set to True only if you use two networks, the first for rotation and the second for translation
     random_initial_pose = False
     save_log = False
@@ -71,13 +71,13 @@ def config():
     max_depth = 80.
     iterative_method = 'multi_range' # ['multi_range', 'single_range', 'single']
     output = './output'
-    save_image = False
+    save_image = True
     outlier_filter = False
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
 weights = [
-    'checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e1_0.048.pth'
+   './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e111_0.001.pth',
 ]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -179,7 +179,7 @@ def main(_config, seed):
                                                 drop_last=False,
                                                 pin_memory=False)
 
-    print(len(TestImgLoader))
+    print("Test image length:", len(TestImgLoader))
 
     models = [] # iterative model
     for i in range(len(weights)):
@@ -313,12 +313,11 @@ def main(_config, seed):
 
             if _config['save_image']:
                 # save the Lidar pointcloud
-                pcl_lidar = o3.PointCloud()
+                pcl_lidar = o3.geometry.PointCloud()
                 pc_lidar = pc_lidar.detach().cpu().numpy()
-                pcl_lidar.points = o3.Vector3dVector(pc_lidar.T[:, :3])
+                pcl_lidar.points = o3.utility.Vector3dVector(pc_lidar.T[:, :3])
 
-                # o3.draw_geometries(downpcd)
-                o3.write_point_cloud(pc_lidar_path + '/{}.pcd'.format(batch_idx), pcl_lidar)
+                o3.io.write_point_cloud(pc_lidar_path + '/{}.pcd'.format(batch_idx), pcl_lidar)
 
 
             R = quat2mat(sample['rot_error'][idx])
@@ -345,12 +344,11 @@ def main(_config, seed):
                 R = img[uv_input[:, 1], uv_input[:, 0], 0] / 255
                 G = img[uv_input[:, 1], uv_input[:, 0], 1] / 255
                 B = img[uv_input[:, 1], uv_input[:, 0], 2] / 255
-                pcl_input = o3.PointCloud()
-                pcl_input.points = o3.Vector3dVector(pc_input_valid[:, :3])
-                pcl_input.colors = o3.Vector3dVector(np.vstack((R, G, B)).T)
+                pcl_input = o3.geometry.PointCloud()
+                pcl_input.points = o3.utility.Vector3dVector(pc_input_valid[:, :3])
+                pcl_input.colors = o3.utility.Vector3dVector(np.vstack((R, G, B)).T)
 
-                # o3.draw_geometries(downpcd)
-                o3.write_point_cloud(pc_input_path + '/{}.pcd'.format(batch_idx), pcl_input)
+                o3.io.write_point_cloud(pc_input_path + '/{}.pcd'.format(batch_idx), pcl_input)
 
             # PAD ONLY ON RIGHT AND BOTTOM SIDE
             rgb = sample['rgb'][idx].to(device)
@@ -475,12 +473,11 @@ def main(_config, seed):
                     R = img[uv_pred[:, 1], uv_pred[:, 0], 0] / 255
                     G = img[uv_pred[:, 1], uv_pred[:, 0], 1] / 255
                     B = img[uv_pred[:, 1], uv_pred[:, 0], 2] / 255
-                    pcl_pred = o3.PointCloud()
-                    pcl_pred.points = o3.Vector3dVector(pc_pred_valid[:, :3])
-                    pcl_pred.colors = o3.Vector3dVector(np.vstack((R, G, B)).T)
+                    pcl_pred = o3.geometry.PointCloud()
+                    pcl_pred.points = o3.utility.Vector3dVector(pc_pred_valid[:, :3])
+                    pcl_pred.colors = o3.utility.Vector3dVector(np.vstack((R, G, B)).T)
 
-                    # o3.draw_geometries(downpcd)
-                    o3.write_point_cloud(pc_pred_path + '/{}.pcd'.format(batch_idx), pcl_pred)
+                    o3.io.write_point_cloud(pc_pred_path + '/{}.pcd'.format(batch_idx), pcl_pred)
 
 
                 if _config['save_image']:
@@ -536,7 +533,7 @@ def main(_config, seed):
 
     if _config['save_log']:
         log_file.close()
-    print("Iterative refinement: ")
+    print("\nIterative refinement: ")
     for i in range(len(weights) + 1):
         errors_r[i] = torch.tensor(errors_r[i]).abs() * (180.0 / 3.141592)
         errors_t[i] = torch.tensor(errors_t[i]).abs() * 100
@@ -547,6 +544,9 @@ def main(_config, seed):
             errors_rpy[i][k] = errors_rpy[i][k].clone().detach().abs()
             errors_t2[i][k] = errors_t2[i][k].clone().detach().abs() * 100
 
+        header = "Baseline (initial calibration – no refinement applied)" if i == 0 else f"Iteration {i}"
+        print(f"{header}:")
+        print("Translation Error && Rotation Error:")
         print(f"Iteration {i}: \tMean Translation Error: {errors_t[i].mean():.4f} cm "
               f"     Mean Rotation Error: {errors_r[i].mean():.4f} °")
         print(f"Iteration {i}: \tMedian Translation Error: {errors_t[i].median():.4f} cm "
@@ -555,6 +555,7 @@ def main(_config, seed):
               f"     Std. Rotation Error: {errors_r[i].std():.4f} °\n")
 
         # translation xyz
+        print("Translation Error XYZ:")
         print(f"Iteration {i}: \tMean Translation X Error: {errors_t2[i][0].mean():.4f} cm "
               f"     Median Translation X Error: {errors_t2[i][0].median():.4f} cm "
               f"     Std. Translation X Error: {errors_t2[i][0].std():.4f} cm ")
@@ -566,6 +567,7 @@ def main(_config, seed):
               f"     Std. Translation Z Error: {errors_t2[i][2].std():.4f} cm \n")
 
         # rotation rpy
+        print("Rotation Error RPY:")
         print(f"Iteration {i}: \tMean Rotation Roll Error: {errors_rpy[i][0].mean(): .4f} °"
               f"     Median Rotation Roll Error: {errors_rpy[i][0].median():.4f} °"
               f"     Std. Rotation Roll Error: {errors_rpy[i][0].std():.4f} °")
@@ -579,7 +581,8 @@ def main(_config, seed):
 
         with open(os.path.join(_config['output'], 'results.txt'),
                   'a', encoding='utf-8') as f:
-            f.write(f"Iteration {i}: \n")
+            header = "Baseline (initial calibration – no refinement applied)" if i == 0 else f"Iteration {i}"
+            f.write(f"{header}:\n")
             f.write("Translation Error && Rotation Error:\n")
             f.write(f"Iteration {i}: \tMean Translation Error: {errors_t[i].mean():.4f} cm "
                     f"     Mean Rotation Error: {errors_r[i].mean():.4f} °\n")
@@ -675,6 +678,8 @@ def main(_config, seed):
     plt.savefig(os.path.join(results_path, 'xyz_plot.png'))
     plt.close('all')
 
+    errors_t_np = errors_t[-1].cpu().numpy()
+    errors_t_np = np.sort(errors_t_np, axis=0)[:-10]
     errors_t = errors_t[-1].numpy()
     errors_t = np.sort(errors_t, axis=0)[:-10] # 去掉一些异常值
     # plt.title('Calibration Translation Error Distribution')
@@ -743,6 +748,8 @@ def main(_config, seed):
     plt.savefig(os.path.join(results_path, 'rpy_plot.png'))
     plt.close('all')
 
+    errors_r_np = errors_r[-1].cpu().numpy()
+    errors_r_np = np.sort(errors_r_np, axis=0)[:-10]
     errors_r = errors_r[-1].numpy()
     errors_r = np.sort(errors_r, axis=0)[:-10] # 去掉一些异常值
     # np.savetxt('rot_error.txt', arr_, fmt='%0.8f')
@@ -766,10 +773,10 @@ def main(_config, seed):
 
 
     if _config["save_name"] is not None:
-        torch.save(torch.stack(errors_t).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_t')
-        torch.save(torch.stack(errors_r).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_r')
-        torch.save(torch.stack(errors_t2).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_t2')
-        torch.save(torch.stack(errors_rpy).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_rpy')
+        np.save(f"./results_for_paper/{_config['save_name']}_errors_t_np.npy", errors_t_np)
+        np.save(f"./results_for_paper/{_config['save_name']}_errors_r_np.npy", errors_r_np)
+        torch.save(torch.stack(errors_t2).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_t2.pt')
+        torch.save(torch.stack(errors_rpy).cpu().numpy(), f'./results_for_paper/{_config["save_name"]}_errors_rpy.pt')
 
     avg_time = total_time / len(TestImgLoader)
     print("Average running time on {} iteration: {} s".format(len(weights), avg_time))
