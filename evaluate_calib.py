@@ -49,8 +49,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/own_odometry_dataset_4/'
-    img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    data_folder = './datasets/own_data_situation_split/'
+    img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
@@ -77,7 +77,7 @@ def config():
     out_fig_lg = 'EN' # [EN, CN]
 
 weights = [
-   './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e111_0.001.pth',
+   './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e106_0.002.pth',
 ]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -433,6 +433,12 @@ def main(_config, seed):
         start = 0
         # t1 = time.time()
 
+        init_extr = sample['extrin'][0]
+        if isinstance(init_extr, np.ndarray):
+            H_init = torch.from_numpy(init_extr).float().to(device)
+        else:
+            H_init = init_extr.to(device)
+
         # Run model
         with torch.no_grad():
             for iteration in range(start, len(weights)):
@@ -448,6 +454,24 @@ def main(_config, seed):
                     T_predicted = torch.tensor([[0., 0., 0.]], device=device)
                 if _config['rot_transl_separated'] and iteration == 1:
                     R_predicted = torch.tensor([[1., 0., 0., 0.]], device=device)
+
+                # Convert quaternion and translation vector into 4×4 matrices
+                R_mat = quat2mat(R_predicted[0])      # 4×4 rotation
+                T_mat = tvector2mat(T_predicted[0])    # 4×4 translation
+
+                # Build the absolute extrinsic: initial_pose @ residual ΔH
+                RT_predicted = torch.mm(T_mat, R_mat)    # ΔH (network residual)
+                H_abs = H_init @ RT_predicted
+
+                # Compose with previous pose
+                RTs.append(torch.mm(RTs[iteration], RT_predicted))  # cumulative transform
+
+                # Output of predicted extrinsic change and absolute extrinsic
+                print(f"Frame {batch_idx:04d}, Iter {iteration+1} Predicted RT:")
+                print(RTs[iteration+1].cpu().numpy())
+
+                print(f"Frame {batch_idx}, Iter {iteration+1}, Absolute Extrinsic:")
+                print(H_abs.cpu().numpy())
 
                 # Project the points in the new pose predicted by the i-th network
                 R_predicted = quat2mat(R_predicted[0])
