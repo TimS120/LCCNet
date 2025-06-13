@@ -54,8 +54,8 @@ def config():
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
-    max_t = 1.5
-    max_r = 20.0
+    max_t = 0.0
+    max_r = 0.0
     occlusion_kernel = 5
     occlusion_threshold = 3.0
     network = 'Res_f1'
@@ -426,6 +426,17 @@ def main(_config, seed):
                        str(errors_t2[0][-1][1].item()), str(errors_t2[0][-1][2].item()),
                        str(errors_rpy[0][-1][0].item()), str(errors_rpy[0][-1][1].item()),
                        str(errors_rpy[0][-1][2].item())]
+
+        print(f"Frame {batch_idx:04d} Calibration Errors per Iteration:")
+        for it in range(1, len(weights) + 1):
+            t_raw = errors_t[it][-1] if errors_t[it] else float('nan')
+            r_raw = errors_r[it][-1].item() if errors_r[it] else float('nan')
+            # Convert to user-friendly units
+            t_err_cm  = t_raw * 100.0            # m --> cm
+            r_err_deg = r_raw * 180.0 / np.pi    # rad --> °
+            print(f"  Iteration {it}:  Translation Error: {t_err_cm:.4f} cm    "
+                  f"Rotation Error: {r_err_deg:.4f} °"
+            )
 
         # if batch_idx == 0.:
         #     print(f'Initial T_erorr: {errors_t[0]}')
