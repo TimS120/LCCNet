@@ -51,8 +51,8 @@ def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
     data_folder = './datasets/own_data_situation_split'  # './odometry_color_short/'
-    img_shape  = (2128, 2600)  # padded image resolution (H, W)
-    input_size  = (256, 512)   # network input resolution (H, W)
+    img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    input_size  = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     use_reflectance = False
     val_sequence = 0
     epochs = 120  # 120 for the first model (iter5), every other only 50, since we can use iter5 as a pretrained model for the other

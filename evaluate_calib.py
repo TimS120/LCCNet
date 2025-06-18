@@ -25,6 +25,7 @@ from sacred import Experiment
 from sacred.utils import apply_backspaces_and_linefeeds
 from tqdm import tqdm
 import time
+import shutil
 
 from models.LCCNet import LCCNet
 from DatasetLidarCamera import DatasetLidarCameraKittiOdometry
@@ -56,8 +57,8 @@ def config():
     use_prev_output = False
     max_t = 0.0
     max_r = 0.0
-    occlusion_kernel = 5
-    occlusion_threshold = 3.0
+    occlusion_kernel = 5  # nowhere used
+    occlusion_threshold = 3.0  # nowhere used
     network = 'Res_f1'
     norm = 'bn'
     show = False
@@ -121,6 +122,15 @@ def lidar_project_depth(pc_rotated, cam_calib, img_shape):
     pc_valid = pc_rotated.T[mask]
 
     return depth_img, pcl_uv, pc_valid
+
+
+def project_pointcloud(pc_xyz, extrinsic, cam_intrinsic):
+    """Project 3D point cloud to 2D image plane using given extrinsic and intrinsics."""
+    pc_homo = np.hstack((pc_xyz, np.ones((pc_xyz.shape[0], 1)))).T  # (4, N)
+    pc_transformed = np.dot(extrinsic, pc_homo)
+    pc_transformed = pc_transformed[:3, :].T
+    pcl_uv, pcl_z = get_2D_lidar_projection(pc_transformed, cam_intrinsic)
+    return pcl_uv, pcl_z
 
 
 @ex.automain
@@ -206,6 +216,10 @@ def main(_config, seed):
         model.eval()
         models.append(model)
 
+    if _config["save_name"] is not None or _config['save_log']:
+        if os.path.isdir('./results_for_paper'):
+            shutil.rmtree("./results_for_paper")
+        os.mkdir("./results_for_paper")
 
     if _config['save_log']:
         log_file = f'./results_for_paper/log_seq{_config["test_sequence"]}.csv'
@@ -273,7 +287,9 @@ def main(_config, seed):
         errors_t2.append([])
         errors_rpy.append([])
 
+    mean_rpe_list = []
     for batch_idx, sample in enumerate(tqdm(TestImgLoader)):
+        print("\n")
         N = 100 # 500
         # if batch_idx > 200:
         #    break
@@ -484,6 +500,79 @@ def main(_config, seed):
                 print(f"Frame {batch_idx}, Iter {iteration+1}, Absolute Extrinsic:")
                 print(H_abs.cpu().numpy())
 
+                # Extract rotation matrix and translation vector from H_abs
+                H_abs_np = H_abs.cpu().numpy()
+                R_abs = H_abs_np[:3, :3]
+                tvec_abs = H_abs_np[:3, 3].reshape(3, 1)
+
+                # Convert rotation matrix to Rodrigues rotation vector
+                rvec_abs, _ = cv2.Rodrigues(R_abs)
+
+                # Print tvec and rvec
+                print(f"Frame {batch_idx:04d}, Iter {iteration+1} Absolute Translation vector (tvec):")
+                print(tvec_abs)
+                print(f"Frame {batch_idx:04d}, Iter {iteration+1} Absolute Rotation vector (rvec):")
+                print(rvec_abs)
+
+                # Start reprojection error computation after last iteration
+                if iteration == len(weights) - 1:
+
+                    pc_lidar_np = pc_lidar.T[:, :3]  # (N, 3)
+                    cam_intrinsic = sample['calib'][0].cpu().numpy()
+                    real_shape = real_shape_input[0]
+
+                    N_pts = pc_lidar_np.shape[0]
+
+                    # project ground-truth
+                    H_gt_np = sample['extrin'][0]
+                    if isinstance(H_gt_np, torch.Tensor):
+                        H_gt_np = H_gt_np.cpu().numpy()
+                    pcl_gt_proj, pcl_gt_z = project_pointcloud(pc_lidar_np, H_gt_np, cam_intrinsic)
+
+                    padded_H, padded_W = img_shape
+                    mask_gt = (
+                        (pcl_gt_proj[:,0] > 0)  & (pcl_gt_proj[:,0] < padded_W) &
+                        (pcl_gt_proj[:,1] > 0)  & (pcl_gt_proj[:,1] < padded_H) &
+                        (pcl_gt_z   > 0)
+                    )
+
+                    # project estimated
+                    H_abs_np = H_abs.cpu().numpy()
+                    pcl_est_proj, pcl_est_z = project_pointcloud(pc_lidar_np, H_abs_np, cam_intrinsic)
+                    mask_est = (
+                        (pcl_est_proj[:,0] > 0)  & (pcl_est_proj[:,0] < padded_W) &
+                        (pcl_est_proj[:,1] > 0)  & (pcl_est_proj[:,1] < padded_H) &
+                        (pcl_est_z   > 0)
+                    )
+
+                    # joint mask
+                    mask_joint = mask_gt & mask_est
+
+                    # print debug info
+                    img_file = os.path.basename(sample['img_path'][0])
+                    print(f"[{img_file}] Frame {batch_idx:04d} RPE debug — "
+                        f"total_pts={N_pts}, GT_in={mask_gt.sum()}, EST_in={mask_est.sum()}, joint={mask_joint.sum()}")
+
+                    # ranges
+                    if mask_gt.sum() > 0:
+                        u_gt, v_gt = pcl_gt_proj[mask_gt, 0], pcl_gt_proj[mask_gt, 1]
+                        print(f"  GT u: {u_gt.min():.1f}–{u_gt.max():.1f}, v: {v_gt.min():.1f}–{v_gt.max():.1f}")
+                    if mask_est.sum() > 0:
+                        u_e, v_e = pcl_est_proj[mask_est, 0], pcl_est_proj[mask_est, 1]
+                        print(f"  EST u: {u_e.min():.1f}–{u_e.max():.1f}, v: {v_e.min():.1f}–{v_e.max():.1f}")
+
+                    pcl_gt_proj_valid = pcl_gt_proj[mask_joint]
+                    pcl_est_proj_valid = pcl_est_proj[mask_joint]
+
+                    if pcl_gt_proj_valid.shape[0] == 0:
+                        print(f"Frame {batch_idx:04d}: No valid points for reprojection error.")
+                        mean_rpe_list.append(-1)
+                    else:
+                        reprojection_errors = np.linalg.norm(pcl_gt_proj_valid - pcl_est_proj_valid, axis=1)
+                        rpe_mean = np.mean(reprojection_errors)
+                        mean_rpe_list.append(rpe_mean)
+                        print(f"Frame {batch_idx:04d}: Mean Reprojection Error = {rpe_mean:.4f} pixels")
+
                 # Project the points in the new pose predicted by the i-th network
                 R_predicted = quat2mat(R_predicted[0])
                 T_predicted = tvector2mat(T_predicted[0])
@@ -568,6 +657,19 @@ def main(_config, seed):
 
     if _config['save_log']:
         log_file.close()
+
+    # write out all per-frame means and their average
+    mean_file = os.path.join(_config['output'], "mean_projection_errors.txt")
+    with open(mean_file, "w", encoding="utf-8") as f:
+        for val in mean_rpe_list:
+            if val != -1:
+                f.write(f"{val:.4f}\n")
+            else:
+                f.write("No valid points for reprojection error.\n")
+        temp = [v for v in mean_rpe_list if v != -1]
+        avg_rpe = float(np.mean(temp))
+        f.write(f"\nMPE average of {len(temp)} pairs: {avg_rpe:.4f}\n")
+
     print("\nIterative refinement: ")
     for i in range(len(weights) + 1):
         errors_r[i] = torch.tensor(errors_r[i]).abs() * (180.0 / 3.141592)
@@ -579,7 +681,7 @@ def main(_config, seed):
             errors_rpy[i][k] = errors_rpy[i][k].clone().detach().abs()
             errors_t2[i][k] = errors_t2[i][k].clone().detach().abs() * 100
 
-        header = "Baseline (initial calibration – no refinement applied)" if i == 0 else f"Iteration {i}"
+        header = "Baseline (initial calibration - no refinement applied)" if i == 0 else f"Iteration {i}"
         print(f"{header}:")
         print("Translation Error && Rotation Error:")
         print(f"Iteration {i}: \tMean Translation Error: {errors_t[i].mean():.4f} cm "
@@ -687,6 +789,9 @@ def main(_config, seed):
     plot_z[:, 0] = mis_calib_input[:, 2].cpu().numpy()
     plot_z[:, 1] = errors_t2[-1][:, 2].cpu().numpy()
     plot_z = plot_z[np.lexsort(plot_z[:, ::-1].T)]
+
+    if not plot_x.shape[0] // N:
+        N = plot_x.shape[0] // 5
 
     N_interval = plot_x.shape[0] // N
     plot_x = plot_x[::N_interval]
