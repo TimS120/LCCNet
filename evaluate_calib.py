@@ -50,7 +50,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/own_data_situation_split/'
+    data_folder = './datasets/TEST_changed_setup'
     img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
@@ -77,8 +77,19 @@ def config():
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
+'''
 weights = [
-   './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e106_0.002.pth',
+    './pretrained/kitti_iter1.pth',
+    './pretrained/kitti_iter2.pth',
+    './pretrained/kitti_iter3.pth',
+    './pretrained/kitti_iter4.pth',
+    './pretrained/kitti_iter5.pth'
+]
+'''
+
+
+weights = [
+    './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e106_0.002.pth'
 ]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -288,6 +299,7 @@ def main(_config, seed):
         errors_rpy.append([])
 
     mean_rpe_list = []
+    # Loop over each frame in the selected test sequence
     for batch_idx, sample in enumerate(tqdm(TestImgLoader)):
         print("\n")
         N = 100 # 500
@@ -314,6 +326,9 @@ def main(_config, seed):
             sample['tr_error'] = prev_tr_error
             sample['rot_error'] = prev_rot_error
 
+        # For each RGB‐LiDAR pair in the sample: 
+        # project the raw and perturbed point clouds into image space to produce normalized depth maps, 
+        # apply optional outlier filtering, and (if enabled) save both the raw and input point clouds as PCD files.
         for idx in range(len(sample['rgb'])):
             # ProjectPointCloud in RT-pose
             real_shape = [sample['rgb'][idx].shape[1], sample['rgb'][idx].shape[2], sample['rgb'][idx].shape[0]]
@@ -334,7 +349,6 @@ def main(_config, seed):
                 pcl_lidar.points = o3.utility.Vector3dVector(pc_lidar.T[:, :3])
 
                 o3.io.write_point_cloud(pc_lidar_path + '/{}.pcd'.format(batch_idx), pcl_lidar)
-
 
             R = quat2mat(sample['rot_error'][idx])
             T = tvector2mat(sample['tr_error'][idx])
@@ -468,6 +482,7 @@ def main(_config, seed):
 
         # Run model
         with torch.no_grad():
+            # Make the predictions with each model and refine the results
             for iteration in range(start, len(weights)):
                 # Run the i-th network
                 t1 = time.time()
@@ -488,7 +503,7 @@ def main(_config, seed):
 
                 # Build the absolute extrinsic: initial_pose @ residual ΔH
                 RT_predicted = torch.mm(T_mat, R_mat)    # ΔH (network residual)
-                H_abs = H_init @ RT_predicted
+                H_abs = torch.inverse(RT_predicted) @ H_init  # Paper: Formula 9
 
                 # Compose with previous pose
                 RTs.append(torch.mm(RTs[iteration], RT_predicted))  # cumulative transform
@@ -602,7 +617,6 @@ def main(_config, seed):
                     pcl_pred.colors = o3.utility.Vector3dVector(np.vstack((R, G, B)).T)
 
                     o3.io.write_point_cloud(pc_pred_path + '/{}.pcd'.format(batch_idx), pcl_pred)
-
 
                 if _config['save_image']:
                     out2 = overlay_imgs(rgb_input[0], lidar)

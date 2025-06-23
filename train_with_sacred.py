@@ -55,11 +55,11 @@ def config():
     input_size  = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     use_reflectance = False
     val_sequence = 0
-    epochs = 120  # 120 for the first model (iter5), every other only 50, since we can use iter5 as a pretrained model for the other
+    epochs = 120  # 120 for the first model (iter5), every other only 50, since we can use iter1 as a pretrained model for the other
     BASE_LEARNING_RATE = 3e-4  # 1e-4
     loss = 'combined'
-    max_t = 1.5  # iter5, iter4, 3, 2, 1: 1.5, 1.0, 0.5, 0.2, 0.1
-    max_r = 20.0  # iter5, iter4, 3, 2, 1: 20.0, 10.0, 5.0, 2.0, 1.0
+    max_t = 1.5  # iter1, iter2, 3, 4, 5: 1.5, 1.0, 0.5, 0.2, 0.1
+    max_r = 20.0  # iter1, iter2, 3, 4, 5: 20.0, 10.0, 5.0, 2.0, 1.0
     batch_size = 32
     num_worker = 6
     network = 'Res_f1'
