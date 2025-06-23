@@ -50,8 +50,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/TEST_changed_setup'
-    img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    data_folder = './datasets/TEST_odometry_color_short_OWN_ARTIFICIAL_CHANGES'
+    img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
@@ -77,7 +77,7 @@ def config():
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
-'''
+
 weights = [
     './pretrained/kitti_iter1.pth',
     './pretrained/kitti_iter2.pth',
@@ -85,13 +85,13 @@ weights = [
     './pretrained/kitti_iter4.pth',
     './pretrained/kitti_iter5.pth'
 ]
+
+
 '''
-
-
 weights = [
     './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e106_0.002.pth'
 ]
-
+'''
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 
@@ -480,6 +480,24 @@ def main(_config, seed):
         else:
             H_init = init_extr.to(device)
 
+        '''
+        # Debug: If you apply translation changes to your pointcloud, you can see in which dimension they are with which sign in the translation vector:
+        # 1. Extract the 3x3 rotation R_LC
+        R_LC = H_init[:3, :3]  # shape (3,3)
+
+        changes_xyz = [0.75, 1.50, 0.00]
+
+        # 2. Build the LiDAR-frame shift vector
+        d_L = torch.tensor(changes_xyz, device=R_LC.device)  # shape (3,)
+
+        # 3. Compute Δt = -R_LC @ d_L
+        delta_t = - (R_LC @ d_L)  # shape (3,)
+
+        # 4. (optional) move back to CPU + NumPy for printing or further use
+        delta_t_np = delta_t.detach().cpu().numpy()
+        print("Expected Δt (camera frame):", delta_t_np)
+        '''
+
         # Run model
         with torch.no_grad():
             # Make the predictions with each model and refine the results
@@ -501,12 +519,11 @@ def main(_config, seed):
                 R_mat = quat2mat(R_predicted[0])      # 4×4 rotation
                 T_mat = tvector2mat(T_predicted[0])    # 4×4 translation
 
-                # Build the absolute extrinsic: initial_pose @ residual ΔH
+                # Compose with previous pose (cumulative transform)
                 RT_predicted = torch.mm(T_mat, R_mat)    # ΔH (network residual)
-                H_abs = torch.inverse(RT_predicted) @ H_init  # Paper: Formula 9
-
-                # Compose with previous pose
-                RTs.append(torch.mm(RTs[iteration], RT_predicted))  # cumulative transform
+                RTs.append(torch.mm(RTs[iteration], RT_predicted))
+                # Compute absolute extrinsic using cumulative transform per Formula (10)
+                H_abs = torch.inverse(RTs[iteration + 1]) @ H_init
 
                 # Output of predicted extrinsic change and absolute extrinsic
                 print(f"Frame {batch_idx:04d}, Iter {iteration+1} Predicted RT:")
@@ -592,7 +609,7 @@ def main(_config, seed):
                 R_predicted = quat2mat(R_predicted[0])
                 T_predicted = tvector2mat(T_predicted[0])
                 RT_predicted = torch.mm(T_predicted, R_predicted)
-                RTs.append(torch.mm(RTs[iteration], RT_predicted)) # inv(H_gt)*H_pred_1*H_pred_2*.....H_pred_n
+                #RTs.append(torch.mm(RTs[iteration], RT_predicted)) # inv(H_gt)*H_pred_1*H_pred_2*.....H_pred_n  # Already done above!
                 if iteration == 0:
                     rotated_point_cloud = pc_rotated_input[0]
                 else:
@@ -604,7 +621,7 @@ def main(_config, seed):
                 depth_img_pred /= _config['max_depth']
                 depth_pred = F.pad(depth_img_pred, shape_pad_input[0])
                 lidar = depth_pred.unsqueeze(0)
-                lidar_resize = F.interpolate(lidar, size=[256, 512], mode="bilinear")
+                lidar_resize = F.interpolate(lidar, size=input_size, mode="bilinear")
 
                 if iteration == len(weights)-1 and _config['save_image']:
                     # save the RGB pointcloud
