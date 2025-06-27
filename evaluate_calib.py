@@ -91,7 +91,7 @@ weights = [
 
 
 weights = [
-    './checkpoints_fixed_training/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e1_2.335.pth'
+    './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e1_2.360.tar'
 ]
 
 
@@ -444,6 +444,7 @@ def main(_config, seed):
         mis_calib_list.append(mis_calib)
 
         T_composed = RT1[:3, 3]
+        print("Translation errors which shall be predicted", T_composed)
         R_composed = quaternion_from_matrix(RT1)
         errors_t[0].append(T_composed.norm().item())
         errors_t2[0].append(T_composed)
@@ -517,6 +518,8 @@ def main(_config, seed):
                     T_predicted = torch.tensor([[0., 0., 0.]], device=device)
                 if _config['rot_transl_separated'] and iteration == 1:
                     R_predicted = torch.tensor([[1., 0., 0., 0.]], device=device)
+
+                print("Predicted translation errors:", T_predicted)
 
                 # Convert quaternion and translation vector into 4×4 matrices
                 R_mat = quat2mat(R_predicted[0])      # 4×4 rotation
@@ -702,7 +705,7 @@ def main(_config, seed):
                 f.write("No valid points for reprojection error.\n")
         temp = [v for v in mean_rpe_list if v != -1]
         avg_rpe = float(np.mean(temp))
-        f.write(f"\nMPE average of {len(temp)} pairs: {avg_rpe:.4f}\n")
+        f.write(f"\nMPE average of {len(temp)} out of {len(mean_rpe_list)} pairs: {avg_rpe:.4f} px\n")
 
     print("\nIterative refinement: ")
     for i in range(len(weights) + 1):

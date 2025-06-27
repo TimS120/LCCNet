@@ -54,7 +54,7 @@ def config():
     input_size  = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     use_reflectance = False
     val_sequence = 0
-    epochs = 120  # 120 for the first model (iter5), every other only 50, since we can use iter1 as a pretrained model for the other
+    epochs = 120  # 120 for the first model (iter1), every other only 50, since we can use the previous iteration model as a pretrained model for the next one
     BASE_LEARNING_RATE = 3e-4  # 1e-4
     loss = 'combined'
     max_t = 1.5  # iter1, iter2, 3, 4, 5: 1.5, 1.0, 0.5, 0.2, 0.1
@@ -266,11 +266,6 @@ def main(_config, _run, seed):
     else:
         raise ValueError("Unknown Loss Function")
 
-    #runs = datetime.now().strftime('%b%d_%H-%M-%S') + "/"
-    # train_writer = SummaryWriter('./logs/' + runs)
-    #ex.info["tensorflow"] = {}
-    #ex.info["tensorflow"]["logdirs"] = ['./logs/' + runs]
-
     # network choice and settings
     if _config['network'].startswith('Res'):
         feat = 1
@@ -290,20 +285,9 @@ def main(_config, _run, seed):
         raise TypeError("Network unknown")
     if _config['weights'] is not None:
         print(f"Loading weights from {_config['weights']}")
-        checkpoint = torch.load(_config['weights'], map_location=device)
-        saved_state_dict = checkpoint['state_dict']
+        saved_state_dict = torch.load(_config['weights'], map_location=device)
         model.load_state_dict(saved_state_dict)
-
-        # original saved file with DataParallel
-        # state_dict = torch.load(model_path)
-        # create new OrderedDict that does not contain `module.`
-        # from collections import OrderedDict
-        # new_state_dict = OrderedDict()
-        # for k, v in checkpoint['state_dict'].items():
-        #     name = k[7:]  # remove `module.`
-        #     new_state_dict[name] = v
-        # # load params
-        # model.load_state_dict(new_state_dict)
+        model = model.to(device)
 
     if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)

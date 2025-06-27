@@ -63,19 +63,24 @@ python3 setup.py build_ext --inplace
 
 Pre-trained models can be downloaded from [google drive](https://drive.google.com/drive/folders/1VbQV3ERDeT3QbdJviNCN71yoWIItZQnl?usp=sharing) provided by the initial authors of the LCCNet
 
-- Note: The scripts are changed; they do now expect the models in .pth format instead of the .tar format (tar includes pth alongside other not needed information). A conversion script is also provided here (`convert_tar_to_pth.py`).
+- Note: The scripts are changed; they do now expect the models in .pth format instead of the .tar format (tar includes pth alongside other not needed information). A conversion script is also provided [here](./convert_tar_to_pth.py).
 
 
 
 ## Evaluation
 
-1. Download [KITTI odometry dataset](http://www.cvlibs.net/datasets/kitti/eval_odometry.php).
-2. Change the path to the dataset in `evaluate_calib.py`.
-```python
-data_folder = '/path/to/the/KITTI/odometry_color/'
-```
-3. Create a folder named `pretrained` to store the pre-trained models in the root path.
-4. Download pre-trained models and modify the weights path in `evaluate_calib.py`.
+<ul>
+  <li>1. Download [KITTI odometry dataset](http://www.cvlibs.net/datasets/kitti/eval_odometry.php).</li>
+  <li>2. Either:
+    <ul>
+    <li>2.1. Change the path to the dataset in `evaluate_calib.py` (e.g. data_folder = '/path/to/the/KITTI/odometry_color/').</li>
+    <li>2.2. Provide directly the configuration values by command line (e.g. "python3 evaluate_calib.py with data_folder = '/path/to/the/KITTI/odometry_color/'")</li>
+    </ul>
+  </li>
+  <li>3. Create a folder named `pretrained` to store the pre-trained models in the root path.</li>
+  <li>4. Download pre-trained models and modify the weights path in `evaluate_calib.py`: </li>
+</ul>
+
 ```python
 weights = [
    './pretrained/kitti_iter1.pth',
@@ -85,17 +90,27 @@ weights = [
    './pretrained/kitti_iter5.pth',
 ]
 ```
-5. Run evaluation.
+<ul>
+  <li>5. Run evaluation:</li>
+</ul>
+
 ```commandline
-python evaluate_calib.py
+python3 evaluate_calib.py
 ```
 
 
 
 ## Train
+Either:
 ```commandline
-python train_with_sacred.py
+python3 train_with_sacred.py
 ```
+Or, if all iterative models shall be trained in one turn:\
+Configurate the script and run it:
+```commandline
+python3 train_automation.py
+```
+
 - As in the [initial paper](https://arxiv.org/pdf/2012.13901) discussed, it makes sense to train the first model with the biggest rotation and translation ranges with e.g. 120 epochs
 - All other models can be transfer-learning trained by using the first trained model as a pretrained model; the epochs can be lowered to e.g. 50 epochs
 
