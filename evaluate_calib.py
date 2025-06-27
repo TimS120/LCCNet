@@ -50,13 +50,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/TEST_odometry_color_short_OWN_ARTIFICIAL_CHANGES'
-    img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    data_folder = './datasets/own_data_situation_split'
+    #data_folder = './datasets/odometry_color_short'
+    img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    #img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
-    max_t = 0.0
-    max_r = 0.0
+    max_t = 1.5
+    max_r = 20.0
     occlusion_kernel = 5  # nowhere used
     occlusion_threshold = 3.0  # nowhere used
     network = 'Res_f1'
@@ -77,7 +79,7 @@ def config():
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
-
+'''
 weights = [
     './pretrained/kitti_iter1.pth',
     './pretrained/kitti_iter2.pth',
@@ -85,13 +87,14 @@ weights = [
     './pretrained/kitti_iter4.pth',
     './pretrained/kitti_iter5.pth'
 ]
-
-
 '''
+
+
 weights = [
-    './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e106_0.002.pth'
+    './checkpoints_fixed_training/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e1_2.335.pth'
 ]
-'''
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 
@@ -404,9 +407,8 @@ def main(_config, seed):
 
         lidar_input = torch.stack(lidar_input)
         rgb_input = torch.stack(rgb_input)
-        rgb_resize = F.interpolate(rgb_input, size=[256, 512], mode="bilinear")
-        lidar_resize = F.interpolate(lidar_input, size=[256, 512], mode="bilinear")
-
+        rgb_resize = F.interpolate(rgb_input, size=input_size, mode="bilinear")
+        lidar_resize = F.interpolate(lidar_input, size=input_size, mode="bilinear")
 
         if _config['save_image']:
             out0 = overlay_imgs(rgb_input[0], lidar_input)
@@ -418,7 +420,8 @@ def main(_config, seed):
 
             depth_img = depth_img.detach().cpu().numpy()
             depth_img = (depth_img / np.max(depth_img)) * 255
-            cv2.imwrite(os.path.join(depth_path, sample['rgb_name'][0]), depth_img[0, :376, :1241])
+            orig_h, orig_w = sample['rgb'][0].shape[1], sample['rgb'][0].shape[2]
+            cv2.imwrite(os.path.join(depth_path, sample['rgb_name'][0]), depth_img[0, :orig_h, :orig_w])
 
         if show:
             out0 = overlay_imgs(rgb_input[0], lidar_input)
@@ -588,10 +591,10 @@ def main(_config, seed):
                     # ranges
                     if mask_gt.sum() > 0:
                         u_gt, v_gt = pcl_gt_proj[mask_gt, 0], pcl_gt_proj[mask_gt, 1]
-                        print(f"  GT u: {u_gt.min():.1f}–{u_gt.max():.1f}, v: {v_gt.min():.1f}–{v_gt.max():.1f}")
+                        print(f"  GT u: {u_gt.min():.1f}-{u_gt.max():.1f}, v: {v_gt.min():.1f}-{v_gt.max():.1f}")
                     if mask_est.sum() > 0:
                         u_e, v_e = pcl_est_proj[mask_est, 0], pcl_est_proj[mask_est, 1]
-                        print(f"  EST u: {u_e.min():.1f}–{u_e.max():.1f}, v: {v_e.min():.1f}–{v_e.max():.1f}")
+                        print(f"  EST u: {u_e.min():.1f}-{u_e.max():.1f}, v: {v_e.min():.1f}-{v_e.max():.1f}")
 
                     pcl_gt_proj_valid = pcl_gt_proj[mask_joint]
                     pcl_est_proj_valid = pcl_est_proj[mask_joint]

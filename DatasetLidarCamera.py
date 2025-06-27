@@ -101,7 +101,6 @@ class DatasetLidarCameraKittiOdometry(Dataset):
                     transl_x = np.random.uniform(-max_t, max_t)
                     transl_y = np.random.uniform(-max_t, max_t)
                     transl_z = np.random.uniform(-max_t, max_t)
-                    # transl_z = np.random.uniform(-max_t, min(max_t, 1.))
                     val_RT_file.writerow([i, transl_x, transl_y, transl_z,
                                            rotx, roty, rotz])
                     self.val_RT.append([float(i), float(transl_x), float(transl_y), float(transl_z),
@@ -202,10 +201,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
 
         # Rotate PointCloud for img_rotation
         if self.split == 'train':
-            qx = mathutils.Quaternion((1.0, 0.0, 0.0), radians(img_rotation))
-            qy = mathutils.Quaternion((0.0, 1.0, 0.0), 0)
-            qz = mathutils.Quaternion((0.0, 0.0, 1.0), 0)
-            R = qz @ qy @ qx
+            R = mathutils.Euler((radians(img_rotation), 0.0, 0.0))
             T = mathutils.Vector((0., 0., 0.))
             pc_in = rotate_forward(pc_in, R, T)
 
@@ -231,10 +227,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         # train的时候每次都随机生成,每个epoch使用不同的参数
         # test则在初始化的时候提前设置好,每个epoch都使用相同的参数
 
-        qx = mathutils.Quaternion((1.0, 0.0, 0.0), rotx)
-        qy = mathutils.Quaternion((0.0, 1.0, 0.0), roty)
-        qz = mathutils.Quaternion((0.0, 0.0, 1.0), rotz)
-        R = qz @ qy @ qx
+        R = mathutils.Euler((rotx, roty, rotz))
         T = mathutils.Vector((transl_x, transl_y, transl_z))
 
         R, T = invert_pose(R, T)

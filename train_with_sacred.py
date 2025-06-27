@@ -14,7 +14,6 @@ import os
 import random
 import time
 
-# import apex
 import mathutils
 import numpy as np
 import torch
@@ -581,8 +580,8 @@ def main(_config, _run, seed):
             rgb_input = torch.stack(rgb_input)
             rgb_show = rgb_input.clone()
             lidar_show = lidar_input.clone()
-            rgb_input = F.interpolate(rgb_input, size=[256, 512], mode="bilinear")
-            lidar_input = F.interpolate(lidar_input, size=[256, 512], mode="bilinear")
+            rgb_input = F.interpolate(rgb_input, size=input_size, mode="bilinear")
+            lidar_input = F.interpolate(lidar_input, size=input_size, mode="bilinear")
 
             loss, transl_e, rot_e, R_predicted,  T_predicted = val(model, rgb_input, lidar_input,
                                                                   sample['tr_error'], sample['rot_error'],
@@ -667,7 +666,7 @@ def main(_config, _run, seed):
             else:
                 sd = model.state_dict()  # single gpu
 
-            # only save raw weights for evaluation
+            # only save raw weights
             torch.save(
                 sd,
                 savefilename

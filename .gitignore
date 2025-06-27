@@ -1,7 +1,8 @@
 __pycache__/
 datasets/
 pretrained/
-*.so
+output*/
+checkpoints*/
+results*/
 build/
-output/
-checkpoints/
+*.so

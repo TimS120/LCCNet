@@ -106,10 +106,9 @@ def invert_pose(R, T):
     Returns:
         (R_GT, T_GT) = (mathutils.Quaternion, mathutils.Vector)
     """
-    R = R.to_matrix()
-    R.resize_4x4()
+    R = R.to_matrix().to_4x4()
     T = mathutils.Matrix.Translation(T)
-    RT = T * R
+    RT = T @ R
     RT.invert_safe()
     T_GT, R_GT, _ = RT.decompose()
     return R_GT.normalized(), T_GT
