@@ -5,4 +5,5 @@ output*/
 checkpoints*/
 results*/
 build/
+temp*/
 *.so

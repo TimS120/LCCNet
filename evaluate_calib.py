@@ -50,15 +50,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/own_data_situation_split'
+    data_folder = './datasets/own_data2_mixed_scenarios'
     #data_folder = './datasets/odometry_color_short'
     img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     #img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
-    max_t = 1.5
-    max_r = 20.0
+    max_t = 1.5/2.0
+    max_r = 20.0/2.0
     occlusion_kernel = 5  # nowhere used
     occlusion_threshold = 3.0  # nowhere used
     network = 'Res_f1'
@@ -71,27 +71,23 @@ def config():
     random_initial_pose = False
     save_log = False
     dropout = 0.0
-    max_depth = 80.
+    max_depth = 50.0
     iterative_method = 'multi_range' # ['multi_range', 'single_range', 'single']
     output = './output'
-    save_image = True
+    save_image = False
     outlier_filter = False
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
 '''
 weights = [
-    './pretrained/kitti_iter1.pth',
-    './pretrained/kitti_iter2.pth',
-    './pretrained/kitti_iter3.pth',
-    './pretrained/kitti_iter4.pth',
-    './pretrained/kitti_iter5.pth'
+    './pretrained/kitti_iter1.pth'
 ]
 '''
 
 
 weights = [
-    './checkpoints/kitti/odom/val_seq_00/models/checkpoint_r20.00_t1.50_e1_2.360.tar'
+    'checkpoints/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.75_e133_0.203.pth'
 ]
 
 
@@ -283,12 +279,11 @@ def main(_config, seed):
         os.makedirs(pc_pred_path)
 
 
-    errors_r = []
-    errors_t = []
-    errors_t2 = []
-    errors_xyz = []
-    errors_rpy = []
-    all_RTs = []
+    errors_r = []  # overall applied rotation error
+    errors_t = []  # overall applied translation error
+    errors_t2 = []  # full 3-component translation error vector
+    errors_rpy = []  # full 3-component rotation error vector
+    all_RTs = []  # 4x4 extrinsic estimate
     mis_calib_list = []
     total_time = 0
 
@@ -317,7 +312,7 @@ def main(_config, seed):
         shape_pad_input = []
         real_shape_input = []
         pc_rotated_input = []
-        RTs = []
+        RTs = []  #
         shape_pad = [0, 0, 0, 0]
         outlier_filter = False
 
@@ -412,10 +407,10 @@ def main(_config, seed):
 
         if _config['save_image']:
             out0 = overlay_imgs(rgb_input[0], lidar_input)
-            out0 = out0[:376, :1241, :]
+            out0 = out0[:img_shape[0], :img_shape[1], :]
             cv2.imwrite(os.path.join(input_path, sample['rgb_name'][0]), out0[:, :, [2, 1, 0]]*255)
             out1 = overlay_imgs(rgb_input[0], lidar_gt[0].unsqueeze(0))
-            out1 = out1[:376, :1241, :]
+            out1 = out1[:img_shape[0], :img_shape[1], :]
             cv2.imwrite(os.path.join(gt_path, sample['rgb_name'][0]), out1[:, :, [2, 1, 0]]*255)
 
             depth_img = depth_img.detach().cpu().numpy()
@@ -434,9 +429,6 @@ def main(_config, seed):
         lidar = lidar_input.to(device)
         rgb_resize = rgb_resize.to(device)
         lidar_resize = lidar_resize.to(device)
-
-        target_transl = sample['tr_error'].to(device)
-        target_rot = sample['rot_error'].to(device)
 
         # the initial calibration errors before sensor calibration
         RT1 = RTs[0]
@@ -468,7 +460,7 @@ def main(_config, seed):
             # Convert to user-friendly units
             t_err_cm  = t_raw * 100.0            # m --> cm
             r_err_deg = r_raw * 180.0 / np.pi    # rad --> °
-            print(f"  Iteration {it}:  Translation Error: {t_err_cm:.4f} cm    "
+            print(f"  Iteration {it}:  Applied translation Error: {t_err_cm:.4f} cm    "
                   f"Rotation Error: {r_err_deg:.4f} °"
             )
 
@@ -555,7 +547,7 @@ def main(_config, seed):
                 # Start reprojection error computation after last iteration
                 if iteration == len(weights) - 1:
 
-                    pc_lidar_np = pc_lidar.T[:, :3]  # (N, 3)
+                    pc_lidar_np = pc_lidar.T[:, :3].detach().cpu().numpy()
                     cam_intrinsic = sample['calib'][0].cpu().numpy()
                     real_shape = real_shape_input[0]
 
@@ -643,7 +635,7 @@ def main(_config, seed):
 
                 if _config['save_image']:
                     out2 = overlay_imgs(rgb_input[0], lidar)
-                    out2 = out2[:376, :1241, :]
+                    out2 = out2[:img_shape[0], :img_shape[1], :]
                     cv2.imwrite(os.path.join(os.path.join(pred_path, 'iteration_'+str(iteration+1)),
                                              sample['rgb_name'][0]), out2[:, :, [2, 1, 0]]*255)
                 if show:
@@ -713,8 +705,6 @@ def main(_config, seed):
         errors_t[i] = torch.tensor(errors_t[i]).abs() * 100
 
         for k in range(len(errors_rpy[i])):
-            # errors_rpy[i][k] = torch.tensor(errors_rpy[i][k])
-            # errors_t2[i][k] = torch.tensor(errors_t2[i][k]) * 100
             errors_rpy[i][k] = errors_rpy[i][k].clone().detach().abs()
             errors_t2[i][k] = errors_t2[i][k].clone().detach().abs() * 100
 

@@ -14,7 +14,6 @@ import os
 import random
 import time
 
-import mathutils
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -49,16 +48,18 @@ ex.captured_out_filter = apply_backspaces_and_linefeeds
 def config():
     checkpoints = './checkpoints/'
     dataset = 'kitti/odom' # 'kitti/raw'
-    data_folder = './datasets/own_data_situation_split'  # './odometry_color_short/'
+    data_folder = './datasets/own_data2_mixed_scenarios'  # './datasets/odometry_color_short/'
+    #data_folder = './datasets/odometry_color_short/'
     img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
+    #img_shape  = (384, 1280)
     input_size  = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     use_reflectance = False
     val_sequence = 0
-    epochs = 120  # 120 for the first model (iter1), every other only 50, since we can use the previous iteration model as a pretrained model for the next one
+    epochs = 150  # 120 for the first model (iter1), every other only 50, since we can use the previous iteration model as a pretrained model for the next one
     BASE_LEARNING_RATE = 3e-4  # 1e-4
     loss = 'combined'
-    max_t = 1.5  # iter1, iter2, 3, 4, 5: 1.5, 1.0, 0.5, 0.2, 0.1
-    max_r = 20.0  # iter1, iter2, 3, 4, 5: 20.0, 10.0, 5.0, 2.0, 1.0
+    max_t = 1.5/2.0  # iter1, iter2, 3, 4, 5: 1.5, 1.0, 0.5, 0.2, 0.1
+    max_r = 20.0/2.0  # iter1, iter2, 3, 4, 5: 20.0, 10.0, 5.0, 2.0, 1.0
     batch_size = 32
     num_worker = 6
     network = 'Res_f1'
@@ -70,7 +71,7 @@ def config():
     precision = "O0"
     norm = 'bn'
     dropout = 0.0
-    max_depth = 80.
+    max_depth = 50.0
     weight_point_cloud = 0.5
     log_frequency = 10
     print_frequency = 50
@@ -80,11 +81,13 @@ def config():
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 
+max_depth_behaviour_switch = 50.1
+
 
 EPOCH = 1
 def _init_fn(worker_id, seed):
     seed = seed + worker_id + EPOCH*100
-    print(f"Init worker {worker_id} with seed {seed}")
+    # print(f"Init worker {worker_id} with seed {seed}")
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -136,6 +139,14 @@ def train(model, optimizer, rgb_img, refl_img, target_transl, target_rot, loss_f
 
     losses['total_loss'].backward()
     optimizer.step()
+
+    # print("rgb_img, refl_img:", rgb_img, refl_img)
+    # print("non-zero values of rgb_img:", torch.count_nonzero(rgb_img))
+    # print("non-zero values of refl_img:", torch.count_nonzero(refl_img))
+
+    # print("target_transl, target_rot:", target_transl, target_rot)
+    # print("transl_err, rot_err", transl_err, rot_err)
+    # print("loss_fn, point_clouds:", loss_fn, point_clouds)
 
     return losses, rot_err, transl_err
 
@@ -249,8 +260,8 @@ def main(_config, _run, seed):
                                                 drop_last=False,
                                                 pin_memory=True)
 
-    print(len(TrainImgLoader))
-    print(len(ValImgLoader))
+    print("len(TrainImgLoader):", len(TrainImgLoader))
+    print("len(ValImgLoader):", len(ValImgLoader))
 
     # loss function choice
     if _config['loss'] == 'simple':
@@ -364,24 +375,29 @@ def main(_config, _run, seed):
                 sample['point_cloud'][idx] = sample['point_cloud'][idx].to(device)
                 pc_lidar = sample['point_cloud'][idx].clone()
 
-                if _config['max_depth'] < 80.:
+                if _config['max_depth'] < max_depth_behaviour_switch:
                     pc_lidar = pc_lidar[:, pc_lidar[0, :] < _config['max_depth']].clone()
 
                 depth_gt, uv = lidar_project_depth(pc_lidar, sample['calib'][idx], real_shape) # image_shape
                 depth_gt /= _config['max_depth']
 
-                R = mathutils.Quaternion(sample['rot_error'][idx]).to_matrix()
-                R.resize_4x4()
-                T = mathutils.Matrix.Translation(sample['tr_error'][idx])
-                RT = T * R
+                T_mat = tvector2mat(sample['tr_error'][idx])
+                R_mat = quat2mat(sample['rot_error'][idx])
+                RT = torch.mm(T_mat, R_mat)
 
                 pc_rotated = rotate_back(sample['point_cloud'][idx], RT) # Pc` = RT * Pc
+                #print("pc_rotated:", pc_rotated)
 
-                if _config['max_depth'] < 80.:
+                if _config['max_depth'] < max_depth_behaviour_switch:
                     pc_rotated = pc_rotated[:, pc_rotated[0, :] < _config['max_depth']].clone()
 
                 depth_img, uv = lidar_project_depth(pc_rotated, sample['calib'][idx], real_shape) # image_shape
+                #print("Initial depth_img:", depth_img)
+                #print("Min/max depth_img:", depth_img.min(), depth_img.max())
+                #print("")
+                #print("Nonzero values:", torch.count_nonzero(depth_img))
                 depth_img /= _config['max_depth']
+                #print("after first change depth_img:", depth_img)
 
                 # PAD ONLY ON RIGHT AND BOTTOM SIDE
                 rgb = sample['rgb'][idx].to(device)
@@ -394,6 +410,41 @@ def main(_config, _run, seed):
                 depth_img = F.pad(depth_img, shape_pad)
                 depth_gt = F.pad(depth_gt, shape_pad)
 
+
+                # print("depth_img:", depth_img)
+
+                # import cv2
+                # import random
+                # from torchvision.utils import save_image
+
+                # # Normalize to 0–255 for 8-bit grayscale image
+                # depth_img_np = depth_img.squeeze().detach().cpu().numpy()
+                # depth_img_norm = cv2.normalize(depth_img_np, None, 0, 255, cv2.NORM_MINMAX)
+                # depth_img_uint8 = depth_img_norm.astype(np.uint8)
+
+                # # Convert RGB tensor to NumPy image
+                # #rgb_np = rgb.detach().cpu().numpy().transpose(1, 2, 0)  # [3, H, W] --> [H, W, 3]
+                # #rgb_uint8 = (rgb_np * 255).clip(0, 255).astype(np.uint8)  # assuming rgb is in [0,1]
+
+                # # Write to file
+                # filename = f"{random.randint(10**9, 10**10 - 1)}"
+                # cv2.imwrite(f"./temp_depth_images/{filename}.png", depth_img_uint8)
+                # #cv2.imwrite(f"./temp_depth_images/{filename}_rgb.png", cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2BGR))
+
+                # mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+                # std  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+                # # move to H×W×3
+                # rgb_np = rgb.detach().cpu().numpy().transpose(1, 2, 0)
+
+                # # undo normalization
+                # rgb_denorm = (rgb_np * std + mean).clip(0.0, 1.0)
+
+                # save_image(torch.from_numpy(rgb_denorm).permute(2,0,1),
+                #         f"./temp_depth_images/{filename}_rgb.png")
+                # print(rgb.size())
+
+
                 rgb_input.append(rgb)
                 lidar_input.append(depth_img)
                 lidar_gt.append(depth_gt)
@@ -401,6 +452,7 @@ def main(_config, _run, seed):
                 shape_pad_input.append(shape_pad)
                 pc_rotated_input.append(pc_rotated)
 
+            #print("lidar_input list:", lidar_input)
             lidar_input = torch.stack(lidar_input)
             rgb_input = torch.stack(rgb_input)
             rgb_show = rgb_input.clone()
@@ -408,6 +460,8 @@ def main(_config, _run, seed):
             rgb_input = F.interpolate(rgb_input, size=list(input_size), mode="bilinear")
             lidar_input = F.interpolate(lidar_input, size=list(input_size), mode="bilinear")
             end_preprocess = time.time()
+            #print("\n\n\nHere really the \"lidar_input\":", lidar_input)
+            #print("\n\n")
             loss, R_predicted,  T_predicted = train(model, optimizer, rgb_input, lidar_input,
                                                    sample['tr_error'], sample['rot_error'],
                                                    loss_fn, sample['point_cloud'], _config['loss'])
@@ -443,9 +497,9 @@ def main(_config, _run, seed):
                 gt_show = torch.from_numpy(gt_show)
                 gt_show = gt_show.permute(2, 0, 1)
 
-                train_writer.add_image("input_proj_lidar", input_show, train_iter)
-                train_writer.add_image("gt_proj_lidar", gt_show, train_iter)
-                train_writer.add_image("pred_proj_lidar", pred_show, train_iter)
+                # train_writer.add_image("input_proj_lidar", input_show, train_iter)
+                # train_writer.add_image("gt_proj_lidar", gt_show, train_iter)
+                # train_writer.add_image("pred_proj_lidar", pred_show, train_iter)
 
                 train_writer.add_scalar("Loss_Total", loss['total_loss'].item(), train_iter)
                 train_writer.add_scalar("Loss_Translation", loss['transl_loss'].item(), train_iter)
@@ -501,7 +555,7 @@ def main(_config, _run, seed):
                 sample['point_cloud'][idx] = sample['point_cloud'][idx].to(device)
                 pc_lidar = sample['point_cloud'][idx].clone()
 
-                if _config['max_depth'] < 80.:
+                if _config['max_depth'] < max_depth_behaviour_switch:
                     pc_lidar = pc_lidar[:, pc_lidar[0, :] < _config['max_depth']].clone()
 
                 depth_gt, uv = lidar_project_depth(pc_lidar, sample['calib'][idx], real_shape) # image_shape
@@ -511,14 +565,13 @@ def main(_config, _run, seed):
                 if _config['use_reflectance']:
                     reflectance = sample['reflectance'][idx].to(device)
 
-                R = mathutils.Quaternion(sample['rot_error'][idx]).to_matrix()
-                R.resize_4x4()
-                T = mathutils.Matrix.Translation(sample['tr_error'][idx])
-                RT = T * R
+                T_mat = tvector2mat(sample['tr_error'][idx])
+                R_mat = quat2mat(sample['rot_error'][idx])
+                RT = torch.mm(T_mat, R_mat)
 
                 pc_rotated = rotate_back(sample['point_cloud'][idx], RT) # Pc` = RT * Pc
 
-                if _config['max_depth'] < 80.:
+                if _config['max_depth'] < max_depth_behaviour_switch:
                     pc_rotated = pc_rotated[:, pc_rotated[0, :] < _config['max_depth']].clone()
 
                 depth_img, uv = lidar_project_depth(pc_rotated, sample['calib'][idx], real_shape) # image_shape
@@ -602,9 +655,9 @@ def main(_config, _run, seed):
                 gt_show = torch.from_numpy(gt_show)
                 gt_show = gt_show.permute(2, 0, 1)
 
-                val_writer.add_image("input_proj_lidar", input_show, val_iter)
-                val_writer.add_image("gt_proj_lidar", gt_show, val_iter)
-                val_writer.add_image("pred_proj_lidar", pred_show, val_iter)
+                # val_writer.add_image("input_proj_lidar", input_show, val_iter)
+                # val_writer.add_image("gt_proj_lidar", gt_show, val_iter)
+                # val_writer.add_image("pred_proj_lidar", pred_show, val_iter)
 
                 val_writer.add_scalar("Loss_Total", loss['total_loss'].item(), val_iter)
                 val_writer.add_scalar("Loss_Translation", loss['transl_loss'].item(), val_iter)
@@ -661,6 +714,25 @@ def main(_config, _run, seed):
                 if os.path.exists(old_save_filename):
                     os.remove(old_save_filename)
             old_save_filename = savefilename
+
+        # periodic checkpointing every 25 epochs
+        if epoch % 25 == 0:
+            if hasattr(model, "module"):
+                sd = model.module.state_dict()
+            else:
+                sd = model.state_dict()
+
+            checkpoint_dir = os.path.join(model_savepath, "checkpoints")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpoint_path = os.path.join(
+                checkpoint_dir,
+                f'checkpoint_r{_config["max_r"]:.2f}_t{_config["max_t"]:.2f}_e{epoch}_{val_loss:.3f}.pth'
+            )
+            torch.save(
+                sd,
+                checkpoint_path
+            )
+            print(f"Checkpoint saved to {checkpoint_path}")
 
     print('full training time = %.2f HR' % ((time.time() - start_full_time) / 3600))
     return _run.result

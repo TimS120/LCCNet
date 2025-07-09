@@ -151,6 +151,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         #     reflectance = pc[:, 3].copy()
         #     reflectance = torch.from_numpy(reflectance).float()
 
+        # transform the LiDAR points into the camera frame with extrinsics
         RT = self.GTs_T_cam02_velo[seq].astype(np.float32)
 
         if pc_org.shape[1] == 4 or pc_org.shape[1] == 3:
@@ -163,10 +164,10 @@ class DatasetLidarCameraKittiOdometry(Dataset):
                 pc_org[3, :] = 1.
         else:
             raise TypeError("Wrong PointCloud shape")
-        
         pc_rot = np.matmul(RT, pc_org.numpy())
         pc_rot = pc_rot.astype(np.float32).copy()
         pc_in = torch.from_numpy(pc_rot)
+
 
         # pc_rot = np.matmul(RT, pc.T)
         # pc_rot = pc_rot.astype(np.float).T.copy()

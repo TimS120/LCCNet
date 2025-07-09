@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def find_best_checkpoint(checkpoints_root: Path, max_r: float, max_t: float) -> Path:
-    """Locate the checkpoint file from the last run with highest epoch number.
+    """Locate the checkpoint file from the given run with highest epoch number.
 
     Args:
         checkpoints_root: Path to the root checkpoints directory.
@@ -53,15 +53,14 @@ def run_iteration(script: str, epochs: int, max_t: float, max_r: float, weights:
     print(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        sys.exit(f"Training failed on epochs={epochs}, max_t={max_t}, max_r={max_r}")
+        raise RuntimeError(
+            f"Training failed on epochs={epochs}, max_t={max_t}, max_r={max_r} (return code {result.returncode})"
+        )
 
 
 def main():
     """Main orchestration: checks root folder, then runs sequential iterations."""
     checkpoints_root = Path("./checkpoints/")
-    if checkpoints_root.exists():
-        sys.exit("Error: './checkpoints/' already exists. Remove or rename it before retrying.")
-
     # Define iterations: (epochs, max_t, max_r)
     iterations = [
         (120, 1.5, 20.0),
@@ -71,17 +70,57 @@ def main():
         (50, 0.1, 1.0)
     ]
     script_path = "train_with_sacred.py"
-    prev_max_t = None
-    prev_max_r = None
-    weights = None
+    failures = []
 
-    for idx, (epochs, max_t, max_r) in enumerate(iterations):
-        if idx == 1:  # We only use the roughest model as pretrained model
-            # locate best checkpoint from previous iteration
-            weights = str(find_best_checkpoint(checkpoints_root, prev_max_r, prev_max_t))
-        run_iteration(script_path, epochs, max_t, max_r, weights)
-        if idx == 0:
-            prev_max_t, prev_max_r = max_t, max_r
+    # First (roughest) level
+    rough_epochs, rough_t, rough_r = iterations[0]
+    weights = None
+    # Check if roughest-level output already exists
+    existing = list(
+        checkpoints_root.rglob(
+            f"**/models/checkpoint_r{rough_r:.2f}_t{rough_t:.2f}_e*_*.pth"
+        )
+    )
+    if existing:
+        print("Iteration 0 (roughest level) already exists, skipping.")
+    else:
+        try:
+            run_iteration(script_path, rough_epochs, rough_t, rough_r, None)
+        except Exception as e:
+            print(f"Iteration 0 failed: {e}")
+            failures.append((0, str(e)))
+    # Always load best from roughest level if available
+    try:
+        best = find_best_checkpoint(checkpoints_root, rough_r, rough_t)
+        weights = str(best)
+        print(f"Using pretrained weights from roughest level: {weights}")
+    except Exception as e:
+        print(f"Failed to locate pretrained weights after iteration 0: {e}")
+        failures.append(("weights", str(e)))
+
+    # Subsequent finer levels
+    for idx, (epochs, max_t, max_r) in enumerate(iterations[1:], start=1):
+        matches = list(
+            checkpoints_root.rglob(
+                f"**/models/checkpoint_r{max_r:.2f}_t{max_t:.2f}_e*_*.pth"
+            )
+        )
+        if matches:
+            print(f"Iteration {idx} already exists, skipping.")
+            continue
+        try:
+            run_iteration(script_path, epochs, max_t, max_r, weights)
+        except Exception as e:
+            print(f"Iteration {idx} failed: {e}")
+            failures.append((idx, str(e)))
+
+    # Summary of failures
+    if failures:
+        print("\nAutomated training completed with FAILURES on following levels:")
+        for lvl, msg in failures:
+            print(f" - Level {lvl}: {msg}")
+    else:
+        print("\nAutomated training completed successfully for all levels.")
 
 
 if __name__ == "__main__":

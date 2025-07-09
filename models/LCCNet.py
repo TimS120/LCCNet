@@ -469,7 +469,7 @@ class LCCNet(nn.Module):
             x2 = self.conv1_lidar(lidar)
             if self.Action_Func == 'leakyrelu':
                 c22 = self.leakyRELU_lidar(x2)  # 2
-            elif self.Action_Func == 'elu':
+            elif self.Action_Func == 'elu':  # 'relu' instead of 'elu'?
                 c22 = self.elu_lidar(x2)  # 2
             c23 = self.layer1_lidar(self.maxpool_lidar(c22))  # 4
             c24 = self.layer2_lidar(c23)  # 8
@@ -482,7 +482,7 @@ class LCCNet(nn.Module):
             if self.Action_Func == 'leakyrelu':
                 c12 = self.leakyRELU_rgb(x1)  # 2
                 c22 = self.leakyRELU_lidar(x2)  # 2
-            elif self.Action_Func == 'elu':
+            elif self.Action_Func == 'elu':  # 'relu' instead of 'elu'?
                 c12 = self.elu_rgb(x1)  # 2
                 c22 = self.elu_lidar(x2)  # 2
             c13 = self.layer1_rgb(self.maxpool_rgb(c12))  # 4
@@ -580,5 +580,3 @@ class LCCNet(nn.Module):
         rot = F.normalize(rot, dim=1)
 
         return transl, rot
-
-
