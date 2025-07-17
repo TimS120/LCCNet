@@ -47,7 +47,7 @@ class DatasetLidarCameraKittiOdometry(Dataset):
         self.K = {}
         self.suf = suf
         self.all_files = []
-        self.sequence_list = ['00', '01', '02', '03', '04', '05']
+        self.sequence_list = ['00', '01', '02', '03', '04']
 
         for seq in self.sequence_list:
             odom = odometry(self.root_dir, seq)

@@ -55,17 +55,17 @@ def config():
     input_size  = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     use_reflectance = False
     val_sequence = 0
-    epochs = 150  # 120 for the first model (iter1), every other only 50, since we can use the previous iteration model as a pretrained model for the next one
+    epochs = 50  # 120 for the first model (iter1), every other only 50, since we can use the previous iteration model as a pretrained model for the next one
     BASE_LEARNING_RATE = 3e-4  # 1e-4
     loss = 'combined'
-    max_t = 1.5/2.0  # iter1, iter2, 3, 4, 5: 1.5, 1.0, 0.5, 0.2, 0.1
-    max_r = 20.0/2.0  # iter1, iter2, 3, 4, 5: 20.0, 10.0, 5.0, 2.0, 1.0
+    max_t = 1.5/2.0  # iter1, iter2, 3, 4, 5: 1.5, 1.0, 0.5, 0.2, 0.1        # 0.75, 0.5
+    max_r = 20.0/2.0  # iter1, iter2, 3, 4, 5: 20.0, 10.0, 5.0, 2.0, 1.0      # 10.0, 5.0
     batch_size = 32
     num_worker = 6
     network = 'Res_f1'
     optimizer = 'adam'
     resume = False
-    weights = None  # './pretrained/kitti_iter5.tar'  # set a weights file to use a pretrained one or None for a start from scratch
+    weights = 'checkpoints/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.75_e280_0.177.pth'  # './pretrained/kitti_iter5.tar'  # set a weights file to use a pretrained one or None for a start from scratch
     rescale_rot = 1.0
     rescale_transl = 2.0
     precision = "O0"
@@ -471,31 +471,31 @@ def main(_config, _run, seed):
                     raise ValueError("Loss {} is NaN".format(key))
 
             if batch_idx % _config['log_frequency'] == 0:
-                show_idx = 0
-                # output image: The overlay image of the input rgb image
-                # and the projected lidar pointcloud depth image
-                rotated_point_cloud = pc_rotated_input[show_idx]
-                R_predicted = quat2mat(R_predicted[show_idx])
-                T_predicted = tvector2mat(T_predicted[show_idx])
-                RT_predicted = torch.mm(T_predicted, R_predicted)
-                rotated_point_cloud = rotate_forward(rotated_point_cloud, RT_predicted)
+                # show_idx = 0
+                # # output image: The overlay image of the input rgb image
+                # # and the projected lidar pointcloud depth image
+                # rotated_point_cloud = pc_rotated_input[show_idx]
+                # R_predicted = quat2mat(R_predicted[show_idx])
+                # T_predicted = tvector2mat(T_predicted[show_idx])
+                # RT_predicted = torch.mm(T_predicted, R_predicted)
+                # rotated_point_cloud = rotate_forward(rotated_point_cloud, RT_predicted)
 
-                depth_pred, uv = lidar_project_depth(rotated_point_cloud,
-                                                    sample['calib'][show_idx],
-                                                    real_shape_input[show_idx]) # or image_shape
-                depth_pred /= _config['max_depth']
-                depth_pred = F.pad(depth_pred, shape_pad_input[show_idx])
+                # depth_pred, uv = lidar_project_depth(rotated_point_cloud,
+                #                                     sample['calib'][show_idx],
+                #                                     real_shape_input[show_idx]) # or image_shape
+                # depth_pred /= _config['max_depth']
+                # depth_pred = F.pad(depth_pred, shape_pad_input[show_idx])
 
-                pred_show = overlay_imgs(rgb_show[show_idx], depth_pred.unsqueeze(0))
-                input_show = overlay_imgs(rgb_show[show_idx], lidar_show[show_idx].unsqueeze(0))
-                gt_show = overlay_imgs(rgb_show[show_idx], lidar_gt[show_idx].unsqueeze(0))
+                # pred_show = overlay_imgs(rgb_show[show_idx], depth_pred.unsqueeze(0))
+                # input_show = overlay_imgs(rgb_show[show_idx], lidar_show[show_idx].unsqueeze(0))
+                # gt_show = overlay_imgs(rgb_show[show_idx], lidar_gt[show_idx].unsqueeze(0))
 
-                pred_show = torch.from_numpy(pred_show)
-                pred_show = pred_show.permute(2, 0, 1)
-                input_show = torch.from_numpy(input_show)
-                input_show = input_show.permute(2, 0, 1)
-                gt_show = torch.from_numpy(gt_show)
-                gt_show = gt_show.permute(2, 0, 1)
+                # pred_show = torch.from_numpy(pred_show)
+                # pred_show = pred_show.permute(2, 0, 1)
+                # input_show = torch.from_numpy(input_show)
+                # input_show = input_show.permute(2, 0, 1)
+                # gt_show = torch.from_numpy(gt_show)
+                # gt_show = gt_show.permute(2, 0, 1)
 
                 # train_writer.add_image("input_proj_lidar", input_show, train_iter)
                 # train_writer.add_image("gt_proj_lidar", gt_show, train_iter)
@@ -504,8 +504,8 @@ def main(_config, _run, seed):
                 train_writer.add_scalar("Loss_Total", loss['total_loss'].item(), train_iter)
                 train_writer.add_scalar("Loss_Translation", loss['transl_loss'].item(), train_iter)
                 train_writer.add_scalar("Loss_Rotation", loss['rot_loss'].item(), train_iter)
-                if _config['loss'] == 'combined':
-                    train_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), train_iter)
+            if _config['loss'] == 'combined':
+                train_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), train_iter)
 
             local_loss += loss['total_loss'].item()
 
@@ -629,31 +629,31 @@ def main(_config, _run, seed):
                     raise ValueError("Loss {} is NaN".format(key))
 
             if batch_idx % _config['log_frequency'] == 0:
-                show_idx = 0
-                # output image: The overlay image of the input rgb image
-                # and the projected lidar pointcloud depth image
-                rotated_point_cloud = pc_rotated_input[show_idx]
-                R_predicted = quat2mat(R_predicted[show_idx])
-                T_predicted = tvector2mat(T_predicted[show_idx])
-                RT_predicted = torch.mm(T_predicted, R_predicted)
-                rotated_point_cloud = rotate_forward(rotated_point_cloud, RT_predicted)
+                # show_idx = 0
+                # # output image: The overlay image of the input rgb image
+                # # and the projected lidar pointcloud depth image
+                # rotated_point_cloud = pc_rotated_input[show_idx]
+                # R_predicted = quat2mat(R_predicted[show_idx])
+                # T_predicted = tvector2mat(T_predicted[show_idx])
+                # RT_predicted = torch.mm(T_predicted, R_predicted)
+                # rotated_point_cloud = rotate_forward(rotated_point_cloud, RT_predicted)
 
-                depth_pred, uv = lidar_project_depth(rotated_point_cloud,
-                                                    sample['calib'][show_idx],
-                                                    real_shape_input[show_idx]) # or image_shape
-                depth_pred /= _config['max_depth']
-                depth_pred = F.pad(depth_pred, shape_pad_input[show_idx])
+                # depth_pred, uv = lidar_project_depth(rotated_point_cloud,
+                #                                     sample['calib'][show_idx],
+                #                                     real_shape_input[show_idx]) # or image_shape
+                # depth_pred /= _config['max_depth']
+                # depth_pred = F.pad(depth_pred, shape_pad_input[show_idx])
 
-                pred_show = overlay_imgs(rgb_show[show_idx], depth_pred.unsqueeze(0))
-                input_show = overlay_imgs(rgb_show[show_idx], lidar_show[show_idx].unsqueeze(0))
-                gt_show = overlay_imgs(rgb_show[show_idx], lidar_gt[show_idx].unsqueeze(0))
+                # pred_show = overlay_imgs(rgb_show[show_idx], depth_pred.unsqueeze(0))
+                # input_show = overlay_imgs(rgb_show[show_idx], lidar_show[show_idx].unsqueeze(0))
+                # gt_show = overlay_imgs(rgb_show[show_idx], lidar_gt[show_idx].unsqueeze(0))
 
-                pred_show = torch.from_numpy(pred_show)
-                pred_show = pred_show.permute(2, 0, 1)
-                input_show = torch.from_numpy(input_show)
-                input_show = input_show.permute(2, 0, 1)
-                gt_show = torch.from_numpy(gt_show)
-                gt_show = gt_show.permute(2, 0, 1)
+                # pred_show = torch.from_numpy(pred_show)
+                # pred_show = pred_show.permute(2, 0, 1)
+                # input_show = torch.from_numpy(input_show)
+                # input_show = input_show.permute(2, 0, 1)
+                # gt_show = torch.from_numpy(gt_show)
+                # gt_show = gt_show.permute(2, 0, 1)
 
                 # val_writer.add_image("input_proj_lidar", input_show, val_iter)
                 # val_writer.add_image("gt_proj_lidar", gt_show, val_iter)
@@ -662,9 +662,8 @@ def main(_config, _run, seed):
                 val_writer.add_scalar("Loss_Total", loss['total_loss'].item(), val_iter)
                 val_writer.add_scalar("Loss_Translation", loss['transl_loss'].item(), val_iter)
                 val_writer.add_scalar("Loss_Rotation", loss['rot_loss'].item(), val_iter)
-                if _config['loss'] == 'combined':
-                    val_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), val_iter)
-
+            if _config['loss'] == 'combined':
+                val_writer.add_scalar("Loss_Point_clouds", loss['point_clouds_loss'].item(), val_iter)
 
             total_val_t += transl_e
             total_val_r += rot_e

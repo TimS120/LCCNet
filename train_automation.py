@@ -63,11 +63,11 @@ def main():
     checkpoints_root = Path("./checkpoints/")
     # Define iterations: (epochs, max_t, max_r)
     iterations = [
-        (120, 1.5, 20.0),
-        (50, 1.0, 10.0),
+        (300, 1.5/2.0, 20.0/2.0),
         (50, 0.5, 5.0),
         (50, 0.2, 2.0),
-        (50, 0.1, 1.0)
+        (50, 0.1, 1.0),
+        (50, 0.05, 0.5)
     ]
     script_path = "train_with_sacred.py"
     failures = []

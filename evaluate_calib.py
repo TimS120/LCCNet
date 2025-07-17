@@ -50,15 +50,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 @ex.config
 def config():
     dataset = 'kitti/odom'
-    data_folder = './datasets/own_data2_mixed_scenarios'
+    data_folder = './datasets/own_target'
     #data_folder = './datasets/odometry_color_short'
     img_shape  = (2128, 2600)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     #img_shape  = (384, 1280)  # padded image resolution (H, W)  # KITTI: (384, 1280)  # Own: (2128, 2600)
     input_size = (256, 512)  # network input resolution (H, W)  # KITTI: (256, 512)  # Own: (256, 512)
     test_sequence = 0
     use_prev_output = False
-    max_t = 1.5/2.0
-    max_r = 20.0/2.0
+    max_t = 1.5/2
+    max_r = 20.0/2
     occlusion_kernel = 5  # nowhere used
     occlusion_threshold = 3.0  # nowhere used
     network = 'Res_f1'
@@ -71,6 +71,7 @@ def config():
     random_initial_pose = False
     save_log = False
     dropout = 0.0
+    #max_depth = 80.0
     max_depth = 50.0
     iterative_method = 'multi_range' # ['multi_range', 'single_range', 'single']
     output = './output'
@@ -79,15 +80,13 @@ def config():
     outlier_filter_th = 10
     out_fig_lg = 'EN' # [EN, CN]
 
-'''
-weights = [
-    './pretrained/kitti_iter1.pth'
-]
-'''
-
 
 weights = [
-    'checkpoints/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.75_e133_0.203.pth'
+    'checkpoints_full_training/kitti/odom/val_seq_00/models/checkpoint_r10.00_t0.75_e280_0.177.pth',
+    'checkpoints_full_training/kitti/odom/val_seq_00/models/checkpoint_r5.00_t0.50_e47_0.101.pth',
+    'checkpoints_full_training/kitti/odom/val_seq_00/models/checkpoint_r2.00_t0.20_e44_0.059.pth',
+    'checkpoints_full_training/kitti/odom/val_seq_00/models/checkpoint_r1.00_t0.10_e42_0.037.pth',
+    'checkpoints_full_training/kitti/odom/val_seq_00/models/checkpoint_r0.50_t0.05_e47_0.021.pth'
 ]
 
 
