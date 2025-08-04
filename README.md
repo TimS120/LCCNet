@@ -7,6 +7,7 @@
 
 ## Table of Contents
 
+- [Main changes to the original repo](#main-changes)
 - [Requirements](#Requirements)
 - [Pre-trained model](#Pre-trained_model)
 - [Evaluation](#Evaluation)
@@ -16,11 +17,21 @@
 
 
 
+## Main changes
+The main changes between the initial fork and the current version of the repo are:
+- Updated the codebase regarding library and function updates for compatibiliy to e.g. new CUDA or PyTorch releases (PyTorch version 1.0.1.post2 is hard/ not possible to get anymore)
+- Removed unused code and added new comments for better maintainability
+- Added a Dockerfile for containerized execution if needed
+- Added a .gitignore to exclude unnecessary files from version control
+- Added a script to automatically train the set of models successively
+
+
+
 ## Requirements
 
 ### Hardware:
   - CPU only
-    - If no gpu is available, then the scripts must be executed with cpu. Here is a big enough ram for a meaningful batch size favorable
+    - If no gpu is available, the scripts must be executed with cpu only. Here is a big enough ram for a meaningful batch size needed
     - The cuda installation steps can then be skipped
   - GPU:
     - If a gpu is available you can run the scripts with the gpu - this is probably faster compared to the cpu usage
@@ -70,7 +81,7 @@ Pre-trained models can be downloaded from [google drive](https://drive.google.co
 ## Evaluation
 
 <ul>
-  <li>1. Download [KITTI odometry dataset](http://www.cvlibs.net/datasets/kitti/eval_odometry.php).</li>
+  <li>1. Download KITTI odometry dataset (http://www.cvlibs.net/datasets/kitti/eval_odometry.php).</li>
   <li>2. Either:
     <ul>
     <li>2.1. Change the path to the dataset in `evaluate_calib.py` (e.g. data_folder = '/path/to/the/KITTI/odometry_color/').</li>
